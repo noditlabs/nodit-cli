@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: make test
+      - name: Build release artifacts
+        shell: bash
+        env:
+          AUTH_ISSUER: ${{ vars.NODIT_AUTH_ISSUER }}
+          API_RESOURCE: ${{ vars.NODIT_API_RESOURCE }}
+          PRODUCT_DOMAIN: ${{ vars.NODIT_PRODUCT_DOMAIN }}
+        run: scripts/build-dist.sh "${GITHUB_REF_NAME}"
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

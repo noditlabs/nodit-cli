@@ -1,0 +1,48 @@
+name: CI
+
+# Pull requests are not accepted here: the branch ruleset blocks main, so a fork PR could only run
+# its own code on the runners without ever being merged.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Format
+        run: test -z "$(gofmt -l .)"
+      - name: Test
+        run: go test -race ./...
+      - name: Vet
+        run: go vet ./...
+      # Both tools declare an older go directive, so `go run` would build them with
+      # that toolchain and their go/types then rejects this module's Go version.
+      - name: Static analysis
+        run: GOTOOLCHAIN="$(go env GOVERSION)" go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - name: Vulnerability scan
+        run: GOTOOLCHAIN="$(go env GOVERSION)" go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  cross-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build every release target
+        run: |
+          for target in linux/amd64 darwin/amd64 darwin/arm64 windows/amd64; do
+            echo "building $target"
+            CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" go build -o /dev/null ./cmd/nodit
+          done
