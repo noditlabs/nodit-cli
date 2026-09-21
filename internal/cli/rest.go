@@ -97,10 +97,13 @@ func (a *app) restCommand() *cobra.Command {
 	var queries []string
 	var body, bodyFile string
 	cmd := &cobra.Command{
-		Use: "rest <method> <path>", Short: "Call Aptos, Cosmos SDK, CometBFT, or Tron Node REST", Args: cobra.ExactArgs(2),
+		Use: "rest <method> <path>", Short: "Call Aptos, Cosmos SDK, CometBFT, or Tron Node REST", Args: helpOnNoArgs(cobra.ExactArgs(2)),
 		Long:    "Call a Node REST endpoint using an API key. Supports catalog Aptos, Cosmos, and Tron networks.\nAptos paths are relative to /v1; Cosmos SDK paths start with /cosmos/ (Initia also /initia/);\nCometBFT paths include /status, /block, /tx and other documented methods;\nTron paths start with /wallet/ or /walletsolidity/.\nUse repeated --query key=value options, --body for inline JSON, or --body-file for a JSON file.\nWhen no body option is given, piped input is used. GET bodies are rejected.\nSuccess includes the original JSON body and safe ledger, cursor, and rate limit headers.\nBinary BCS is unsupported. Requests never follow redirects or retry automatically.\nSome GET routes, including CometBFT broadcasts, can change blockchain state.",
 		Example: "  nodit rest GET /accounts/0x1 -n aptos-mainnet\n  nodit rest GET /block -n cosmos-mainnet --query height=100\n  nodit rest POST /view -n aptos-mainnet --body-file request.json\n  nodit rest POST /wallet/getnowblock -n tron-mainnet --body '{}'",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
 			n, err := a.productNetwork(flags.network, "node")
 			if err != nil {
 				return err

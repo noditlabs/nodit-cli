@@ -147,6 +147,18 @@ func usageError(cmd *cobra.Command, err error) *commandError {
 	return invalid("Invalid command or arguments. Run nodit --help.")
 }
 
+// A command that takes arguments and has no subcommands answers a bare invocation with its help,
+// the way a command group does. Only the empty invocation is treated this way; a wrong number of
+// arguments is still a usage error.
+func helpOnNoArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		return validate(cmd, args)
+	}
+}
+
 func quotedName(text, prefix string) (string, bool) {
 	rest, found := strings.CutPrefix(text, prefix)
 	if !found {

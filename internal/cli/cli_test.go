@@ -377,7 +377,7 @@ func TestArgumentAndCommandErrorsPointSomewhere(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"rpc"}, "Usage: nodit rpc <method> [params...]"},
+		{[]string{"rest", "GET"}, "Usage: nodit rest <method> <path>"},
 		{[]string{"network", "get"}, "Usage: nodit network get <id>"},
 		{[]string{"netwrok"}, "Did you mean network?"},
 		{[]string{"bogus"}, "Run nodit --help."},
@@ -386,6 +386,21 @@ func TestArgumentAndCommandErrorsPointSomewhere(t *testing.T) {
 		a.execute(t.Context(), tc.args)
 		if out := a.stderr.(*bytes.Buffer).String(); !strings.Contains(out, tc.want) {
 			t.Fatalf("%v: missing %q in %s", tc.args, tc.want, out)
+		}
+	}
+}
+
+func TestBareLeafCommandAnswersWithHelp(t *testing.T) {
+	for _, args := range [][]string{{"rpc"}, {"rest"}} {
+		a := newTestApp(t)
+		code, out, e := run(t, a, args...)
+		if code != 0 || e != "" {
+			t.Fatalf("%v: exit %d, stderr %s", args, code, e)
+		}
+		for _, want := range []string{"Usage:", "Examples:", "--network"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%v: missing %q in %s", args, want, out)
+			}
 		}
 	}
 }
