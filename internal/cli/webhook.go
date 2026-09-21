@@ -30,19 +30,19 @@ const (
 func (k webhookKind) isFlexible() bool { return k == flexibleWebhook }
 
 func (a *app) webhookCommand() *cobra.Command {
-	root := &cobra.Command{Use: "webhook", Short: "Manage Classic and Flexible Webhooks using an API key"}
+	root := asGroup(&cobra.Command{Use: "webhook", Short: "Manage Classic and Flexible Webhooks using an API key"})
 	root.AddCommand(a.classicWebhookCommand(), a.flexibleWebhookCommand())
 	return root
 }
 
 func (a *app) classicWebhookCommand() *cobra.Command {
-	root := &cobra.Command{Use: "classic", Short: "Manage Classic Webhooks"}
+	root := asGroup(&cobra.Command{Use: "classic", Short: "Manage Classic Webhooks"})
 	root.AddCommand(a.webhookListCommand(classicWebhook), a.webhookGetCommand(classicWebhook), a.webhookBodyCommand(classicWebhook, "create"), a.webhookBodyCommand(classicWebhook, "update"), a.webhookDeleteCommand(classicWebhook), a.classicHistoryCommand(), a.classicAddressesCommand())
 	return root
 }
 
 func (a *app) flexibleWebhookCommand() *cobra.Command {
-	root := &cobra.Command{Use: "flexible", Short: "Manage Flexible Webhooks"}
+	root := asGroup(&cobra.Command{Use: "flexible", Short: "Manage Flexible Webhooks"})
 	root.AddCommand(a.webhookListCommand(flexibleWebhook), a.webhookGetCommand(flexibleWebhook), a.webhookBodyCommand(flexibleWebhook, "create"), a.webhookBodyCommand(flexibleWebhook, "update"), a.webhookDeleteCommand(flexibleWebhook), a.flexibleStreamsCommand(), a.flexibleSchemaCommand())
 	return root
 }
@@ -88,7 +88,7 @@ func (a *app) webhookListCommand(kind webhookKind) *cobra.Command {
 
 func (a *app) webhookGetCommand(kind webhookKind) *cobra.Command {
 	var flags productFlags
-	cmd := &cobra.Command{Use: "get <id>", Short: "Get one webhook", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "get <id>", Short: "Get one webhook", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -123,16 +123,14 @@ func (a *app) webhookGetCommand(kind webhookKind) *cobra.Command {
 
 func (a *app) webhookBodyCommand(kind webhookKind, action string) *cobra.Command {
 	var flags webhookFlags
-	use, method := action, http.MethodPost
+	use, method, short := action, http.MethodPost, "Create a webhook from JSON"
+	// create takes its input entirely from --body, so only update has an argument to help about.
+	args := cobra.PositionalArgs(cobra.NoArgs)
 	if action == "update" {
-		use, method = "update <id>", http.MethodPatch
+		use, method, short = "update <id>", http.MethodPatch, "Update a webhook from JSON"
+		args = helpOnNoArgs(cobra.ExactArgs(1))
 	}
-	cmd := &cobra.Command{Use: use, Short: action + " a webhook from JSON", Args: func(cmd *cobra.Command, args []string) error {
-		if action == "create" {
-			return cobra.NoArgs(cmd, args)
-		}
-		return cobra.ExactArgs(1)(cmd, args)
-	}, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: use, Short: short, Args: args, RunE: func(cmd *cobra.Command, args []string) error {
 		if !cmd.Flags().Changed("network") {
 			return invalid("Create and update require an explicit --network.")
 		}
@@ -212,7 +210,7 @@ func webhookBody(value string, kind webhookKind, action string) (json.RawMessage
 
 func (a *app) webhookDeleteCommand(kind webhookKind) *cobra.Command {
 	var flags webhookFlags
-	cmd := &cobra.Command{Use: "delete <id>", Short: "Delete one webhook", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "delete <id>", Short: "Delete one webhook", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if !cmd.Flags().Changed("network") {
 			return invalid("Delete requires an explicit --network.")
 		}
@@ -288,7 +286,7 @@ func (a *app) classicHistoryCommand() *cobra.Command {
 	page, rpp := 1, 10
 	var status, startAt, endAt, startSequence string
 	var withMessage bool
-	cmd := &cobra.Command{Use: "history <id>", Short: "List Classic Webhook delivery history", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "history <id>", Short: "List Classic Webhook delivery history", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -385,7 +383,7 @@ func (a *app) flexibleStreamsCommand() *cobra.Command {
 
 func (a *app) flexibleSchemaCommand() *cobra.Command {
 	var flags productFlags
-	cmd := &cobra.Command{Use: "schema <stream-id>", Short: "Get a Flexible Webhook stream schema", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "schema <stream-id>", Short: "Get a Flexible Webhook stream schema", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := validID(args[0]); err != nil {
 			return err
 		}

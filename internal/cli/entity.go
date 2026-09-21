@@ -14,7 +14,7 @@ func (a *app) entityLookupCommand() *cobra.Command {
 	var flags productFlags
 	var ids []string
 	cmd := &cobra.Command{
-		Use: "lookup <input>", Short: "Identify accounts and transactions on explicit networks", Args: cobra.ExactArgs(1),
+		Use: "lookup <input>", Short: "Identify accounts and transactions on explicit networks", Args: helpOnNoArgs(cobra.ExactArgs(1)),
 		Long:    "Identify an input across multiple networks. --networks is required.\nThe input and the API's input/items/normalizedInput fields are preserved.\nThis command ignores NODIT_NETWORK and config.network; --network is not accepted.\nSupported networks: " + strings.Join(strings.Fields(lookupNetworks), ", ") + ".",
 		Example: "  nodit data entity lookup 0x000000000000000000000000000000000000dEaD --networks ethereum-mainnet,base-mainnet",
 		RunE: func(cmd *cobra.Command, args []string) error {

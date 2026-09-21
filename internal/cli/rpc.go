@@ -15,9 +15,6 @@ func (a *app) rpcCommand() *cobra.Command {
 		Long:    "Call JSON-RPC on catalog EVM, Solana, Sui, Cosmos, Bitcoin, Tron, and XRPL networks.\nXRPL answers outside JSON-RPC 2.0 and its errors arrive with HTTP 200.\nAptos uses nodit rest. Sei and Injective route known CometBFT methods to rpc- hosts,\nand eth_, net_, web3_, debug_, and trace_ methods to evm- hosts.\nPass simple params after the method. Valid JSON values keep their types; other values become strings.\nUse --params or --params-file for a complete JSON array. Piped input is used when no params are given.\nThe original JSON-RPC response is preserved. No unit conversion or automatic retry is performed.\nMethods can change blockchain state.",
 		Example: "  nodit rpc eth_getBalance 0x000000000000000000000000000000000000dEaD latest -n ethereum-mainnet",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return cmd.Help()
-			}
 			n, err := a.productNetwork(flags.network, "node")
 			if err != nil {
 				return err

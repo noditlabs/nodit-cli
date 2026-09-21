@@ -87,7 +87,7 @@ func (a *app) execute(ctx context.Context, args []string) int {
 	root := a.command()
 	root.SetArgs(args)
 	cmd, err := root.ExecuteContextC(ctx)
-	if err == nil {
+	if err == nil || errors.Is(err, errHelpShown) {
 		return 0
 	}
 	var ce *commandError
@@ -139,6 +139,10 @@ func usageError(cmd *cobra.Command, err error) *commandError {
 	}
 	// cobra quotes the name it could not resolve and can suggest near matches from the same tree.
 	if name, found := quotedName(text, "unknown command "); found {
+		// cobra applies its own default only on the path it suggests from itself, which is the root.
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
 		if near := cmd.SuggestionsFor(name); len(near) > 0 {
 			return invalid("Unknown command " + name + ". Did you mean " + strings.Join(near, ", ") + "?")
 		}
@@ -147,15 +151,30 @@ func usageError(cmd *cobra.Command, err error) *commandError {
 	return invalid("Invalid command or arguments. Run nodit --help.")
 }
 
-// A command that takes arguments and has no subcommands answers a bare invocation with its help,
-// the way a command group does. Only the empty invocation is treated this way; a wrong number of
-// arguments is still a usage error.
+// A command that takes positional arguments answers a bare invocation with its help, the way a
+// command group does. The check sits in the argument validator so it runs before required flags
+// are enforced, and the sentinel ends the run without reporting a failure. Only the empty
+// invocation is treated this way; a wrong number of arguments is still a usage error.
+// cobra answers a command with no run of its own with the help before it validates arguments, so a
+// group that only holds subcommands needs both: the run keeps the bare invocation printing help,
+// and NoArgs lets a mistyped subcommand be reported instead of silently helping.
+func asGroup(cmd *cobra.Command) *cobra.Command {
+	cmd.Args = cobra.NoArgs
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+	return cmd
+}
+
+var errHelpShown = errors.New("help shown")
+
 func helpOnNoArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			return nil
+		if len(args) > 0 {
+			return validate(cmd, args)
 		}
-		return validate(cmd, args)
+		if err := cmd.Help(); err != nil {
+			return err
+		}
+		return errHelpShown
 	}
 }
 
@@ -246,7 +265,7 @@ func (a *app) version() error {
 }
 
 func (a *app) configCommand() *cobra.Command {
-	r := &cobra.Command{Use: "config", Short: "Manage local defaults"}
+	r := asGroup(&cobra.Command{Use: "config", Short: "Manage local defaults"})
 	r.AddCommand(&cobra.Command{Use: "path", Short: "Show the config file path", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
 		return a.success(map[string]any{"path": a.config.path()})
 	}})
@@ -272,7 +291,7 @@ func (a *app) configCommand() *cobra.Command {
 		}
 		return a.success(keys)
 	}})
-	r.AddCommand(&cobra.Command{Use: "get <key>", Short: "Get network, output, or selected project", Args: cobra.ExactArgs(1), ValidArgsFunction: completeConfigArgs, RunE: func(_ *cobra.Command, args []string) error {
+	r.AddCommand(&cobra.Command{Use: "get <key>", Short: "Get network, output, or selected project", Args: helpOnNoArgs(cobra.ExactArgs(1)), ValidArgsFunction: completeConfigArgs, RunE: func(_ *cobra.Command, args []string) error {
 		c, err := a.config.read()
 		if err != nil {
 			return err
@@ -297,7 +316,7 @@ func (a *app) configCommand() *cobra.Command {
 		}
 		return a.success(map[string]any{args[0]: value})
 	}})
-	r.AddCommand(&cobra.Command{Use: "set <key> <value>", Short: "Set network or output", Args: cobra.ExactArgs(2), ValidArgsFunction: completeConfigArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	r.AddCommand(&cobra.Command{Use: "set <key> <value>", Short: "Set network or output", Args: helpOnNoArgs(cobra.ExactArgs(2)), ValidArgsFunction: completeConfigArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		key, value := args[0], args[1]
 		switch key {
 		case "network":
@@ -326,7 +345,7 @@ func (a *app) configCommand() *cobra.Command {
 		}
 		return a.success(map[string]any{key: value})
 	}})
-	r.AddCommand(&cobra.Command{Use: "unset <key>", Short: "Remove a saved network or output default", Args: cobra.ExactArgs(1), ValidArgsFunction: completeConfigArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	r.AddCommand(&cobra.Command{Use: "unset <key>", Short: "Remove a saved network or output default", Args: helpOnNoArgs(cobra.ExactArgs(1)), ValidArgsFunction: completeConfigArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		if args[0] != "network" && args[0] != "output" && args[0] != "project" {
 			return invalid("Config key must be network, output, or project.")
 		}
@@ -349,7 +368,7 @@ func (a *app) configCommand() *cobra.Command {
 }
 
 func (a *app) networkCommand() *cobra.Command {
-	r := &cobra.Command{Use: "network", Short: "Inspect the bundled public network catalog"}
+	r := asGroup(&cobra.Command{Use: "network", Short: "Inspect the bundled public network catalog"})
 	var chain, product string
 	list := &cobra.Command{Use: "list", Short: "List supported networks", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
 		items, err := filterNetworks(chain, product)
@@ -362,7 +381,7 @@ func (a *app) networkCommand() *cobra.Command {
 	list.Flags().StringVar(&product, "product", "", "Filter by product: node, data, webhook, stream")
 	_ = list.RegisterFlagCompletionFunc("chain", completeChain)
 	_ = list.RegisterFlagCompletionFunc("product", completeWords("node data webhook stream"))
-	get := &cobra.Command{Use: "get <id>", Short: "Show a supported network", Args: cobra.ExactArgs(1), ValidArgsFunction: func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+	get := &cobra.Command{Use: "get <id>", Short: "Show a supported network", Args: helpOnNoArgs(cobra.ExactArgs(1)), ValidArgsFunction: func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
 		if len(args) > 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}

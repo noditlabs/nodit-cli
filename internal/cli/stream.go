@@ -29,7 +29,7 @@ func defaultStreamDial(ctx context.Context, endpoint string, headers http.Header
 }
 
 func (a *app) streamCommand() *cobra.Command {
-	root := &cobra.Command{Use: "stream", Short: "Watch Nodit Stream subscriptions"}
+	root := asGroup(&cobra.Command{Use: "stream", Short: "Watch Nodit Stream subscriptions"})
 	var flags productFlags
 	var eventType, condition string
 	var messages int

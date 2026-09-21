@@ -262,7 +262,7 @@ func TestCLIHelpErrorsAndFormats(t *testing.T) {
 			t.Fatalf("%v %d %s", args, c, e)
 		}
 	}
-	for _, args := range [][]string{{"network", "get"}, {"network", "get", "no-network"}, {"auth", "key"}, {"--secret-unknown"}, {"version", "--timeout", "-1"}, {"version", "-o", "xml"}, {"version", "--server", "hidden"}} {
+	for _, args := range [][]string{{"network", "get", "kaia-mainnet", "extra"}, {"network", "get", "no-network"}, {"auth", "key"}, {"--secret-unknown"}, {"version", "--timeout", "-1"}, {"version", "-o", "xml"}, {"version", "--server", "hidden"}} {
 		if c, out, e := run(t, a, args...); c != 2 || out != "" || strings.Contains(e, "secret-") {
 			t.Fatalf("%v %d %s %s", args, c, out, e)
 		}
@@ -378,7 +378,9 @@ func TestArgumentAndCommandErrorsPointSomewhere(t *testing.T) {
 		want string
 	}{
 		{[]string{"rest", "GET"}, "Usage: nodit rest <method> <path>"},
-		{[]string{"network", "get"}, "Usage: nodit network get <id>"},
+		{[]string{"network", "get", "kaia-mainnet", "extra"}, "Usage: nodit network get <id>"},
+		{[]string{"data", "toekn"}, "Did you mean token?"},
+		{[]string{"webhook", "clasic"}, "Did you mean classic?"},
 		{[]string{"netwrok"}, "Did you mean network?"},
 		{[]string{"bogus"}, "Run nodit --help."},
 	} {
@@ -391,13 +393,17 @@ func TestArgumentAndCommandErrorsPointSomewhere(t *testing.T) {
 }
 
 func TestBareLeafCommandAnswersWithHelp(t *testing.T) {
-	for _, args := range [][]string{{"rpc"}, {"rest"}} {
+	for _, args := range [][]string{
+		{"rpc"}, {"rest"}, {"network", "get"}, {"config", "set"}, {"apikey", "get"},
+		{"project", "select"}, {"allowlist", "add"}, {"data", "entity", "lookup"},
+		{"webhook", "classic", "delete"}, {"webhook", "classic", "addresses", "list"},
+	} {
 		a := newTestApp(t)
 		code, out, e := run(t, a, args...)
 		if code != 0 || e != "" {
 			t.Fatalf("%v: exit %d, stderr %s", args, code, e)
 		}
-		for _, want := range []string{"Usage:", "Examples:", "--network"} {
+		for _, want := range []string{"Usage:", "Flags:"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("%v: missing %q in %s", args, want, out)
 			}

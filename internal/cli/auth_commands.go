@@ -5,7 +5,7 @@ import (
 )
 
 func (a *app) authCommand() *cobra.Command {
-	r := &cobra.Command{Use: "auth", Short: "Manage OAuth login", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	r := asGroup(&cobra.Command{Use: "auth", Short: "Manage OAuth login"})
 	r.AddCommand(&cobra.Command{Use: "login", Short: "Log in using browser OAuth with PKCE", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return a.login(cmd.Context()) }})
 	r.AddCommand(&cobra.Command{Use: "status", Short: "Show local credential sources without revealing secrets", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
 		login := map[string]any{"source": "none", "status": "not_logged_in"}

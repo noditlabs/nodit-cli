@@ -43,18 +43,18 @@ type dataInput struct {
 }
 
 func (a *app) dataCommand() *cobra.Command {
-	root := &cobra.Command{Use: "data", Short: "Query Web3 Data API using an API key"}
+	root := asGroup(&cobra.Command{Use: "data", Short: "Query Web3 Data API using an API key"})
 	groups := map[string]*cobra.Command{}
 	for _, spec := range dataSpecs {
 		group := groups[spec.group]
 		if group == nil {
-			group = &cobra.Command{Use: spec.group, Short: "Query " + spec.group + " data"}
+			group = asGroup(&cobra.Command{Use: spec.group, Short: "Query " + spec.group + " data"})
 			groups[spec.group] = group
 			root.AddCommand(group)
 		}
 		group.AddCommand(a.dataLeaf(spec))
 	}
-	entity := &cobra.Command{Use: "entity", Short: "Find accounts or transactions across networks"}
+	entity := asGroup(&cobra.Command{Use: "entity", Short: "Find accounts or transactions across networks"})
 	entity.AddCommand(a.entityLookupCommand())
 	root.AddCommand(entity)
 	return root

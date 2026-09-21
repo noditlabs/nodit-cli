@@ -23,7 +23,7 @@ type addressQuery struct {
 }
 
 func (a *app) classicAddressesCommand() *cobra.Command {
-	root := &cobra.Command{Use: "addresses", Short: "Manage Classic ADDRESS_ACTIVITY addresses"}
+	root := asGroup(&cobra.Command{Use: "addresses", Short: "Manage Classic ADDRESS_ACTIVITY addresses"})
 	root.AddCommand(a.addressListCommand(), a.addressUpdateCommand(), a.addressExportCommand())
 	return root
 }
@@ -65,7 +65,7 @@ func addAddressQuery(u *url.URL, q addressQuery, paged bool) {
 func (a *app) addressListCommand() *cobra.Command {
 	var flags productFlags
 	var q addressQuery
-	cmd := &cobra.Command{Use: "list <id>", Short: "List ADDRESS_ACTIVITY addresses", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "list <id>", Short: "List ADDRESS_ACTIVITY addresses", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func (a *app) addressListCommand() *cobra.Command {
 
 func (a *app) addressUpdateCommand() *cobra.Command {
 	var flags webhookFlags
-	cmd := &cobra.Command{Use: "update <id>", Short: "Add and remove ADDRESS_ACTIVITY addresses", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "update <id>", Short: "Add and remove ADDRESS_ACTIVITY addresses", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if !cmd.Flags().Changed("network") {
 			return invalid("Address update requires an explicit --network.")
 		}
@@ -177,7 +177,7 @@ func (a *app) addressExportCommand() *cobra.Command {
 	var flags productFlags
 	var q addressQuery
 	var file string
-	cmd := &cobra.Command{Use: "export <id>", Short: "Download ADDRESS_ACTIVITY addresses as CSV", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "export <id>", Short: "Download ADDRESS_ACTIVITY addresses as CSV", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := validID(args[0]); err != nil {
 			return err
 		}

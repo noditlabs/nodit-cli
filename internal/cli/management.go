@@ -59,7 +59,7 @@ func setOptional(q url.Values, key, value string) {
 }
 
 func (a *app) projectCommand() *cobra.Command {
-	root := &cobra.Command{Use: "project", Short: "Inspect and select account projects using OAuth"}
+	root := asGroup(&cobra.Command{Use: "project", Short: "Inspect and select account projects using OAuth"})
 	var all bool
 	list := &cobra.Command{
 		Use: "list", Short: "List account projects", Args: cobra.NoArgs,
@@ -183,7 +183,7 @@ func keyCount(parseErr error, keys []map[string]any) string {
 
 func (a *app) projectSelectCommand() *cobra.Command {
 	var selectedKeyID string
-	cmd := &cobra.Command{Use: "select <id>", Short: "Select a project and securely link one active API key", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "select <id>", Short: "Select a project and securely link one active API key", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		if err := projectID(id); err != nil {
 			return err
@@ -281,7 +281,7 @@ func stringField(value map[string]any, name string) string {
 }
 
 func (a *app) apiKeyCommand() *cobra.Command {
-	root := &cobra.Command{Use: "apikey", Short: "Inspect account API keys using OAuth"}
+	root := asGroup(&cobra.Command{Use: "apikey", Short: "Inspect account API keys using OAuth"})
 	var project, status string
 	var all bool
 	page, rpp := 1, 20
@@ -325,7 +325,7 @@ func (a *app) apiKeyCommand() *cobra.Command {
 	list.Flags().BoolVar(&all, "all", false, "List every status, including deleted keys")
 	list.Flags().IntVar(&page, "page", 1, "Page number")
 	list.Flags().IntVar(&rpp, "rpp", 20, "Results per page, 1-1000")
-	get := &cobra.Command{Use: "get <key-id>", Short: "Get API key metadata with its value masked", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	get := &cobra.Command{Use: "get <key-id>", Short: "Get API key metadata with its value masked", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := keyID(args[0]); err != nil {
 			return err
 		}
@@ -531,7 +531,7 @@ const usageTimeseriesLong = "Buckets are cut on UTC boundaries, and the bucket t
 	"A 5m range cannot exceed one day, so pass --period or --from with that granularity."
 
 func (a *app) usageCommand() *cobra.Command {
-	root := &cobra.Command{Use: "usage", Short: "Inspect account Compute Unit usage using OAuth", Long: usageLong}
+	root := asGroup(&cobra.Command{Use: "usage", Short: "Inspect account Compute Unit usage using OAuth", Long: usageLong})
 	for _, kind := range []string{"summary", "timeseries", "breakdown"} {
 		kind := kind
 		var flags usageFlags
@@ -557,7 +557,7 @@ func (a *app) usageCommand() *cobra.Command {
 }
 
 func (a *app) allowlistCommand() *cobra.Command {
-	root := &cobra.Command{Use: "allowlist", Short: "Manage project IP and domain restrictions using OAuth"}
+	root := asGroup(&cobra.Command{Use: "allowlist", Short: "Manage project IP and domain restrictions using OAuth"})
 	var project string
 	list := &cobra.Command{Use: "list", Short: "Get allowlist settings and entries", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if err := projectID(project); err != nil {
@@ -614,13 +614,13 @@ func (a *app) allowlistSetCommand() *cobra.Command {
 }
 
 func (a *app) allowlistEntryCommand(add bool) *cobra.Command {
-	action, method := "add", http.MethodPost
+	action, method, short := "add", http.MethodPost, "Add one IP or domain entry"
 	if !add {
-		action, method = "remove", http.MethodDelete
+		action, method, short = "remove", http.MethodDelete, "Remove one IP or domain entry"
 	}
 	var project, kind, name string
 	var yes bool
-	cmd := &cobra.Command{Use: action + " <value>", Short: action + " one IP or domain entry", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: action + " <value>", Short: short, Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
 		if err := projectID(project); err != nil {
 			return err
 		}
