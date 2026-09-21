@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -130,5 +131,58 @@ func TestAddressExportIsAtomicAndDoesNotOverwrite(t *testing.T) {
 	content2, _ := os.ReadFile(target)
 	if string(content2) != string(content) {
 		t.Fatal("existing file changed")
+	}
+}
+
+func TestClassicEventCatalogIsUsableForBody(t *testing.T) {
+	a := productTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) { t.Fatal("the catalog reached the API"); return nil, nil })
+	c, out, e := run(t, a, "webhook", "classic", "event-types", "-o", "json")
+	if c != 0 || e != "" {
+		t.Fatalf("%d %s", c, e)
+	}
+	for _, want := range []string{"ADDRESS_ACTIVITY", "TOKEN_TRANSFER", "LOG", "TRANSACTION", "EVENT"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+	// Every listed type has a schema, and its example is a body the create command accepts.
+	for _, name := range []string{"ADDRESS_ACTIVITY", "TOKEN_TRANSFER", "LOG", "TRANSACTION", "EVENT"} {
+		c, out, e := run(t, a, "webhook", "classic", "schema", name, "-o", "json")
+		if c != 0 || e != "" {
+			t.Fatalf("%s: %d %s", name, c, e)
+		}
+		var parsed struct {
+			Data struct {
+				ConditionSets []struct {
+					Fields []struct{ Name string }
+				}
+				ExampleBody map[string]any
+				Networks    []string
+			}
+		}
+		if json.Unmarshal([]byte(out), &parsed) != nil {
+			t.Fatalf("%s: %s", name, out)
+		}
+		if len(parsed.Data.ConditionSets) == 0 || len(parsed.Data.ConditionSets[0].Fields) == 0 {
+			t.Fatalf("%s has no condition fields", name)
+		}
+		if parsed.Data.ExampleBody["eventType"] != name || parsed.Data.ExampleBody["condition"] == nil {
+			t.Fatalf("%s example does not match: %v", name, parsed.Data.ExampleBody)
+		}
+		// The networks have to be ids --network accepts, not a chain family name.
+		if len(parsed.Data.Networks) == 0 {
+			t.Fatalf("%s lists no networks", name)
+		}
+		for _, id := range parsed.Data.Networks {
+			n, err := findNetwork(id)
+			if err != nil || !inWords(strings.Join(n.Products, " "), "webhook") {
+				t.Fatalf("%s lists %q, which is not a webhook network", name, id)
+			}
+		}
+	}
+	// An unknown type names the ones that exist instead of leaving the caller to guess.
+	if c, _, e := run(t, a, "webhook", "classic", "schema", "BLOCK_PERIOD"); c != 2 || !strings.Contains(e, "ADDRESS_ACTIVITY") {
+		t.Fatalf("%d %s", c, e)
 	}
 }

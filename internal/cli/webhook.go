@@ -37,7 +37,7 @@ func (a *app) webhookCommand() *cobra.Command {
 
 func (a *app) classicWebhookCommand() *cobra.Command {
 	root := asGroup(&cobra.Command{Use: "classic", Short: "Manage Classic Webhooks"})
-	root.AddCommand(a.webhookListCommand(classicWebhook), a.webhookGetCommand(classicWebhook), a.webhookBodyCommand(classicWebhook, "create"), a.webhookBodyCommand(classicWebhook, "update"), a.webhookDeleteCommand(classicWebhook), a.classicHistoryCommand(), a.classicAddressesCommand())
+	root.AddCommand(a.webhookListCommand(classicWebhook), a.webhookGetCommand(classicWebhook), a.webhookBodyCommand(classicWebhook, "create"), a.webhookBodyCommand(classicWebhook, "update"), a.webhookDeleteCommand(classicWebhook), a.classicHistoryCommand(), a.classicAddressesCommand(), a.classicEventTypesCommand(), a.classicEventSchemaCommand())
 	return root
 }
 
@@ -163,7 +163,13 @@ func (a *app) webhookBodyCommand(kind webhookKind, action string) *cobra.Command
 		return a.success(result)
 	}}
 	flags.bind(cmd)
-	cmd.Flags().StringVar(&flags.body, "body", "", "Required JSON object or @file using API-specific fields")
+	bodyHelp := "Required JSON object or @file using API-specific fields"
+	if kind.isFlexible() {
+		bodyHelp += "; see nodit webhook flexible streams and schema"
+	} else {
+		bodyHelp += "; see nodit webhook classic event-types and schema"
+	}
+	cmd.Flags().StringVar(&flags.body, "body", "", bodyHelp)
 	_ = cmd.MarkFlagRequired("body")
 	return cmd
 }
