@@ -48,6 +48,7 @@ func (a *app) request(ctx context.Context, method, endpoint string, form url.Val
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent())
 	client := *a.httpClient
 	client.Timeout = time.Duration(a.timeoutMS) * time.Millisecond
 	// Never forward OAuth credentials through an HTTP redirect.
@@ -196,7 +197,11 @@ func (a *app) login(ctx context.Context) error {
 	u.RawQuery = mapValues("response_type", "code", "client_id", clientID, "redirect_uri", redirect, "scope", oauthScopes, "resource", a.env.Resource, "state", state, "code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:]), "code_challenge_method", "S256").Encode()
 	fmt.Fprintln(a.stderr, "Opening the browser for Nodit login...")
 	if err = a.openBrowser(u.String()); err != nil {
-		return failure("BROWSER_OPEN_FAILED", "Cannot open the browser.")
+		// The callback server is already listening and the URL carries no secret, so printing it
+		// leaves a way to finish the login instead of ending here. The callback returns to
+		// 127.0.0.1, which is why the browser has to be on this machine.
+		fmt.Fprintln(a.stderr, "Cannot open the browser. Open this URL on this machine within 2 minutes to continue:")
+		fmt.Fprintln(a.stderr, u.String())
 	}
 	select {
 	case <-ctx.Done():

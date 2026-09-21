@@ -3,8 +3,10 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -90,7 +92,7 @@ func (a *app) watchStream(ctx context.Context, n network, key, eventType string,
 		dial = defaultStreamDial
 	}
 	connectContext, cancel := context.WithTimeout(ctx, time.Duration(a.timeoutMS)*time.Millisecond)
-	conn, response, err := dial(connectContext, u.String(), nil)
+	conn, response, err := dial(connectContext, u.String(), http.Header{"User-Agent": {userAgent()}})
 	cancel()
 	if err != nil {
 		if response != nil && response.Body != nil {
@@ -98,6 +100,16 @@ func (a *app) watchStream(ctx context.Context, n network, key, eventType string,
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// The connect deadline is this command's own, so it never reaches ctx above. The dialer
+		// reports a timeout during the TCP connect as a net.Error rather than the context error,
+		// so both phases are covered only by asking the error itself.
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return failure("TIMEOUT", "Connecting to Nodit Stream timed out. Raise the limit with --timeout.")
+		}
+		if code, message := transportCause(err, "Stream"); code != "" {
+			return failure(code, message)
 		}
 		return failure("STREAM_CONNECT_FAILED", "Cannot connect to Nodit Stream.")
 	}
@@ -145,7 +157,13 @@ func (a *app) watchStream(ctx context.Context, n network, key, eventType string,
 					subscribed = true
 				}
 			case strings.HasPrefix(packet, "44"+streamNamespace):
-				return failure("STREAM_CONNECT_FAILED", "Nodit Stream rejected the Socket.IO connection.")
+				e := failure("STREAM_CONNECT_FAILED", "Nodit Stream rejected the Socket.IO connection.")
+				// The server states the reason in the packet, the same way it does for a
+				// rejected subscription. Without it the error says only that something failed.
+				if reason := streamRejectionReason(strings.TrimPrefix(packet, "44"+streamNamespace), key); reason != nil {
+					e.Details = reason
+				}
+				return e
 			case strings.HasPrefix(packet, "42"+streamNamespace+","):
 				if !connected {
 					return failure("INVALID_STREAM_RESPONSE", "Stream emitted an event before connecting.")
@@ -173,6 +191,21 @@ func (a *app) watchStream(ctx context.Context, n network, key, eventType string,
 			}
 		}
 	}
+}
+
+// A connect error packet carries the reason after the namespace, or nothing at all.
+func streamRejectionReason(rest, key string) any {
+	rest = strings.TrimSpace(strings.TrimPrefix(rest, ","))
+	if rest == "" {
+		return nil
+	}
+	var value any
+	d := json.NewDecoder(strings.NewReader(rest))
+	d.UseNumber()
+	if d.Decode(&value) != nil {
+		return nil
+	}
+	return redactAPIValue(value, key)
 }
 
 func parseStreamEvent(raw, key string) (string, []any, error) {

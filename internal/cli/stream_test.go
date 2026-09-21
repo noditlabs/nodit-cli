@@ -44,6 +44,34 @@ func (f *fakeStream) WriteMessage(_ int, value []byte) error {
 }
 func (f *fakeStream) Close() error { f.mu.Lock(); defer f.mu.Unlock(); f.closed = true; return nil }
 
+func TestStreamConnectRejectionCarriesTheServerReason(t *testing.T) {
+	for _, tc := range []struct{ packet, want string }{
+		{`44/v1/websocket,"Internal server error."`, "Internal server error."},
+		{`44/v1/websocket`, ""},
+	} {
+		a := productTestApp(t)
+		f := &fakeStream{reads: [][]byte{
+			[]byte(`0{"sid":"engine","pingInterval":25000}`),
+			[]byte(tc.packet),
+		}, readErr: errors.New("closed")}
+		a.streamDial = func(context.Context, string, http.Header) (streamConnection, *http.Response, error) {
+			return f, nil, nil
+		}
+		code, _, stderr := run(t, a, "stream", "watch", "-n", "ethereum-mainnet", "--event-type", "ADDRESS_ACTIVITY", "--messages", "1", "-o", "jsonl")
+		if code != 1 || !strings.Contains(stderr, "STREAM_CONNECT_FAILED") {
+			t.Fatalf("%d %s", code, stderr)
+		}
+		// The CLI wording stays; the server reason rides along so the cause is not lost.
+		if tc.want == "" {
+			if strings.Contains(stderr, "details") {
+				t.Fatalf("details on a packet without a reason: %s", stderr)
+			}
+		} else if !strings.Contains(stderr, tc.want) {
+			t.Fatalf("reason %q missing from %s", tc.want, stderr)
+		}
+	}
+}
+
 func TestStreamSocketIOProtocolAndJSONL(t *testing.T) {
 	a := productTestApp(t)
 	a.now = func() time.Time { return time.Unix(123, 456) }
@@ -58,8 +86,14 @@ func TestStreamSocketIOProtocolAndJSONL(t *testing.T) {
 	var endpoint string
 	a.streamDial = func(_ context.Context, raw string, headers http.Header) (streamConnection, *http.Response, error) {
 		endpoint = raw
-		if len(headers) != 0 {
-			t.Fatal("credentials sent as headers")
+		// The key travels in the Socket.IO auth payload, so nothing but the user agent belongs here.
+		for name, values := range headers {
+			if name != "User-Agent" {
+				t.Fatalf("unexpected header %s", name)
+			}
+			if !strings.HasPrefix(values[0], "nodit-cli/") {
+				t.Fatalf("user agent %q", values[0])
+			}
 		}
 		return f, nil, nil
 	}

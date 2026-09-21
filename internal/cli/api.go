@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,7 +11,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/noditlabs/nodit-cli/internal/buildinfo"
 )
 
 const maxAPIResponseBytes = 16 << 20
@@ -23,6 +27,32 @@ func (a *app) apiPost(ctx context.Context, endpoint, key string, body any) (any,
 
 func (a *app) apiRequest(ctx context.Context, method, endpoint, key string, body any) (any, http.Header, error) {
 	return a.jsonRequest(ctx, method, endpoint, "X-API-KEY", key, body)
+}
+
+// These causes call for different responses: a refused or unresolved host may work on the next try,
+// while a rejected certificate never will until the environment changes. Only errors the standard
+// library types unambiguously are named; anything else is left to the caller's general code so a
+// wrong cause is never reported. The wording is ours because the underlying text can carry a proxy
+// address or an internal host name.
+func transportCause(err error, host string) (string, string) {
+	var certErr *tls.CertificateVerificationError
+	if errors.As(err, &certErr) {
+		return "TLS_FAILED", "The " + host + " host's certificate was rejected."
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "DNS_FAILED", "Cannot resolve the " + host + " host."
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "CONNECTION_REFUSED", "Cannot reach the " + host + " host."
+	}
+	return "", ""
+}
+
+// Without this the requests go out as the Go default, which does not say which client or version
+// made them.
+func userAgent() string {
+	return "nodit-cli/" + buildinfo.ReportedVersion()
 }
 
 func (a *app) jsonRequest(ctx context.Context, method, endpoint, authHeader, credential string, body any) (any, http.Header, error) {
@@ -40,6 +70,7 @@ func (a *app) jsonRequest(ctx context.Context, method, endpoint, authHeader, cre
 	}
 	req.Header.Set(authHeader, credential)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent())
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -55,6 +86,8 @@ func (a *app) jsonRequest(ctx context.Context, method, endpoint, authHeader, cre
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
 			code, message = "TIMEOUT", "API request timed out. Raise the limit with --timeout."
+		} else if named, text := transportCause(err, "API"); named != "" {
+			code, message = named, text
 		}
 		return nil, nil, failure(code, message)
 	}

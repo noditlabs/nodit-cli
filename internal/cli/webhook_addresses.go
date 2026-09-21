@@ -225,6 +225,7 @@ func (a *app) downloadCSV(ctx context.Context, endpoint, key, target string) err
 	}
 	req.Header.Set("X-API-KEY", key)
 	req.Header.Set("Accept", "text/csv")
+	req.Header.Set("User-Agent", userAgent())
 	client := *a.httpClient
 	client.Timeout = time.Duration(a.timeoutMS) * time.Millisecond
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
