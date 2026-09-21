@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,10 @@ var (
 	uuidPattern        = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	usagePeriodPattern = regexp.MustCompile(`^[1-9][0-9]*[mhdw]$`)
 )
+
+// The shortest window that can be answered: rows are five minutes wide and the confirmed boundary
+// trails the clock by up to two of them, so a shorter window holds nothing confirmed.
+const usageMinPeriod = 10 * time.Minute
 
 func (a *app) managementRequest(cmd *cobra.Command, method, path string, query url.Values, body any) (any, error) {
 	token, err := a.accessToken(cmd.Context())
@@ -413,6 +419,33 @@ func usageQuery(f usageFlags, kind string) (url.Values, error) {
 	return q, nil
 }
 
+// usagePeriodDuration parses a --period value the pattern has already accepted, such as 30m, 24h, 7d
+// or 4w. A value that does not fit in a Duration is rejected rather than wrapped: the wrapped number
+// is small and positive often enough to read as a window far shorter than the one that was asked for.
+func usagePeriodDuration(period string) (time.Duration, error) {
+	amount, err := strconv.ParseInt(period[:len(period)-1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	var unit time.Duration
+	switch period[len(period)-1] {
+	case 'm':
+		unit = time.Minute
+	case 'h':
+		unit = time.Hour
+	case 'd':
+		unit = 24 * time.Hour
+	case 'w':
+		unit = 7 * 24 * time.Hour
+	default:
+		return 0, fmt.Errorf("unsupported period unit %q", period[len(period)-1:])
+	}
+	if amount > int64(math.MaxInt64)/int64(unit) {
+		return 0, fmt.Errorf("period %s is out of range", period)
+	}
+	return time.Duration(amount) * unit, nil
+}
+
 func validateUsageFlags(f usageFlags, kind string) error {
 	if f.project != "" {
 		if err := projectID(f.project); err != nil {
@@ -435,8 +468,17 @@ func validateUsageFlags(f usageFlags, kind string) error {
 	if !parsed[0].IsZero() && !parsed[1].IsZero() && !parsed[0].Before(parsed[1]) {
 		return invalid("--from must be earlier than --to.")
 	}
-	if f.period != "" && !usagePeriodPattern.MatchString(f.period) {
-		return invalid("--period must be a positive value such as 24h or 7d.")
+	if f.period != "" {
+		if !usagePeriodPattern.MatchString(f.period) {
+			return invalid("--period must be a positive value such as 24h or 7d.")
+		}
+		d, err := usagePeriodDuration(f.period)
+		if err != nil {
+			return invalid("--period is out of the supported range.")
+		}
+		if d < usageMinPeriod {
+			return invalid("--period must cover at least 10m.")
+		}
 	}
 	for _, value := range f.requestTypes {
 		if !inWords("NODE_API WEB3_DATA_API APTOS_INDEXER_API WEBHOOK STREAM", value) {
@@ -471,13 +513,21 @@ const usageLong = "Usage figures are for reference. The billing statement is the
 	"Dedicated node traffic is excluded from Compute Unit accounting and is not counted here;\n" +
 	"check dedicated node usage in the console.\n" +
 	"Compute Unit history reaches as far back as the account plan allows, while request counts\n" +
-	"reach back 40 days at most regardless of plan. A range whose end the count aggregation has\n" +
-	"not reached yet reports requests as null rather than a partial count. Leaving --to unset\n" +
-	"answers up to where the aggregation reached instead, so the counts cover slightly less than\n" +
-	"the range asked for."
+	"reach back 40 days at most regardless of plan.\n" +
+	"Answers stop at the last confirmed five-minute boundary, whatever --to asks for and even\n" +
+	"when it is left unset, so both usedCu and requests cover the same window and the last few\n" +
+	"minutes are missing from both. A range lying entirely past that boundary is rejected, and\n" +
+	"--period must cover at least 10m.\n" +
+	"requests is null when the range reaches past the 40 day count history, when --request-type\n" +
+	"names WEBHOOK, STREAM or WEB3_DATA_API, which carry no request counts, and while counting\n" +
+	"is unreadable or has not reached the current billing cycle. That last case leaves the\n" +
+	"window uncut, so usedCu still answers the cycle it was asked for.\n" +
+	"coveredThrough is the end of the window the answer covers, so comparing it with the --to that\n" +
+	"was sent shows whether the range was cut. Plan limits are the account as it stands and are\n" +
+	"unaffected by the range."
 
-const usageTimeseriesLong = "Buckets are cut on UTC boundaries, and a bucket the aggregation has not covered\n" +
-	"to its end reports requests as null while usedCu keeps growing on re-query.\n" +
+const usageTimeseriesLong = "Buckets are cut on UTC boundaries, and the bucket that straddles the confirmed\n" +
+	"boundary reports requests as null while usedCu keeps growing on re-query.\n" +
 	"A 5m range cannot exceed one day, so pass --period or --from with that granularity."
 
 func (a *app) usageCommand() *cobra.Command {

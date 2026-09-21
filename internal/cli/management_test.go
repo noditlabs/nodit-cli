@@ -190,6 +190,9 @@ func TestManagementValidationBeforeRequest(t *testing.T) {
 		{"apikey", "list", "--status", "PAUSED"},
 		{"usage", "summary", "--period", "24h", "--from", "2026-09-01T00:00:00Z"},
 		{"usage", "summary", "--period", "0h"},
+		// Shorter than the window the confirmed boundary can cover.
+		{"usage", "summary", "--period", "1m"},
+		{"usage", "summary", "--period", "9m"},
 		{"usage", "summary", "--network", "mainnet"},
 		{"usage", "timeseries", "--granularity", "1m"},
 		{"usage", "breakdown"},
@@ -210,7 +213,13 @@ func TestUsageHelpCarriesTheAccountingCaveats(t *testing.T) {
 		if c != 0 || e != "" {
 			t.Fatalf("%v %d %s", args, c, e)
 		}
-		for _, want := range []string{"billing statement", "Dedicated node traffic is excluded", "40 days"} {
+		for _, want := range []string{
+			"billing statement",
+			"Dedicated node traffic is excluded",
+			"40 days",
+			"last confirmed five-minute boundary",
+			"at least 10m",
+		} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("%v missing %q", args, want)
 			}

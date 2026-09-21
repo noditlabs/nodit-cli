@@ -489,3 +489,30 @@ func TestFlagHelpShowsValuesNotFormatNames(t *testing.T) {
 	}
 	walk(a.command())
 }
+
+func TestUsagePeriodDurationRejectsWhatItCannotRepresent(t *testing.T) {
+	for _, tc := range []struct {
+		period string
+		want   time.Duration
+	}{
+		{"10m", 10 * time.Minute},
+		{"24h", 24 * time.Hour},
+		{"7d", 7 * 24 * time.Hour},
+		{"4w", 4 * 7 * 24 * time.Hour},
+	} {
+		got, err := usagePeriodDuration(tc.period)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s -> %v %v", tc.period, got, err)
+		}
+	}
+	// Multiplying these by the unit wraps, and a wrapped value reads as a window that was never asked
+	// for: the first lands under the minimum, the second well over it.
+	for _, period := range []string{"153722867281m", "10000000000000000m", "99999999999999999999m"} {
+		if d, err := usagePeriodDuration(period); err == nil {
+			t.Fatalf("%s accepted as %v", period, d)
+		}
+	}
+	if _, err := usagePeriodDuration("30s"); err == nil {
+		t.Fatal("an unknown unit was read as weeks")
+	}
+}
