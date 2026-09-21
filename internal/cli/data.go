@@ -27,9 +27,9 @@ var dataSpecs = []dataSpec{
 	{"nft", "list", "List an account's NFTs", "nft/getNftsOwnedByAccount", evmDataChains, "address contract paging", "--address 0x000000000000000000000000000000000000dEaD --rpp 10"},
 	{"nft", "transfers", "List NFT transfers by account or contract", "nft/getNftTransfersByAccount", evmDataChains, "address contract paging range relation", "--address 0x000000000000000000000000000000000000dEaD --rpp 10"},
 	{"transaction", "list", "List an account's transactions", "blockchain/getTransactionsByAccount", evmDataChains + " aptos tron " + utxoChains + " xrpl", "address paging range relation ledger", "--address 0x000000000000000000000000000000000000dEaD --rpp 10"},
-	{"transaction", "get", "Get a transaction by hash, ID, or Aptos version", "blockchain/getTransactionByHash", evmDataChains + " aptos " + utxoChains + " xrpl", "id", "--id 0x4e3a375441017e5f68ad07615659d7ccbbafbbdd998a850dec3e544601cc0db9"},
+	{"transaction", "get", "Get a transaction by hash, ID, or Aptos version", "blockchain/getTransactionByHash", evmDataChains + " aptos " + utxoChains + " xrpl", "id", "--id 0x2f1c5c2b44f771e942a8506148e256f94f1a464babc938ae0690c6e34cd79190"},
 	{"block", "get", "Get a block or XRPL ledger by number or hash", "blockchain/getBlockByHashOrNumber", evmDataChains + " aptos " + utxoChains + " xrpl", "number id", "--number latest"},
-	{"event", "by-account", "List Aptos events emitted by an account", "blockchain/getEventsByAccount", "aptos", "address event-types paging range", "--address 0x1 --rpp 10"},
+	{"event", "by-account", "List Aptos events emitted by an account", "blockchain/getEventsByAccount", "aptos", "address event-types paging range", "--address 0xc7efb4076dbe143cbcd98cfaaa929ecfc8f299203dfff63b95ccb6bfe19850fa --rpp 10"},
 	{"event", "by-type", "List Aptos events by full Move event type", "blockchain/getEventsByType", "aptos", "event-types paging range", "--event-type 0x1::fungible_asset::Withdraw --rpp 10"},
 }
 
@@ -85,6 +85,28 @@ func dataLong(spec dataSpec, ids []string) string {
 	return strings.Join(notes, "\n")
 }
 
+// block get and transaction get share the flag but not its meaning.
+func idFlagHelp(spec dataSpec) string {
+	if spec.group == "block" {
+		return "Block hash, or XRPL ledger hash"
+	}
+	return "Transaction hash, UTXO ID, or Aptos version"
+}
+
+// An example has to name a network the command actually serves, so an Aptos-only command does not
+// illustrate itself with an Ethereum id.
+func exampleNetwork(ids []string) string {
+	for _, id := range ids {
+		if id == "ethereum-mainnet" {
+			return id
+		}
+	}
+	if len(ids) > 0 {
+		return ids[0]
+	}
+	return "ethereum-mainnet"
+}
+
 func (a *app) dataLeaf(spec dataSpec) *cobra.Command {
 	var flags productFlags
 	var v dataInput
@@ -97,7 +119,7 @@ func (a *app) dataLeaf(spec dataSpec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: spec.name, Short: spec.summary, Args: cobra.NoArgs,
 		Long:    dataLong(spec, ids),
-		Example: "  nodit data " + spec.group + " " + spec.name + " " + spec.example + " -n ethereum-mainnet",
+		Example: "  nodit data " + spec.group + " " + spec.name + " " + spec.example + " -n " + exampleNetwork(ids),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			n, err := a.productNetwork(flags.network, "data")
 			if err != nil {
@@ -131,7 +153,7 @@ func (a *app) dataLeaf(spec dataSpec) *cobra.Command {
 	}{
 		{"address", &v.address, "Account address in the chain's own format, such as 0xdAC1...ec7", "a"},
 		{"contract", &v.contract, "Token or NFT contract address, not an Aptos asset type", "c"},
-		{"id", &v.id, "Transaction hash, UTXO ID, Aptos version, or block hash", "i"},
+		{"id", &v.id, idFlagHelp(spec), "i"},
 		{"number", &v.number, "Block number or ledger index: 21000000, earliest, or latest", ""},
 		{"relation", &v.relation, "Account transfer relation: from, to, or both", ""},
 	} {

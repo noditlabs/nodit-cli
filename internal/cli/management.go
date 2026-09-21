@@ -372,7 +372,7 @@ func bindUsageFlags(cmd *cobra.Command, f *usageFlags, kind string) {
 	cmd.Flags().StringVarP(&f.project, "project", "p", "", "Project ID, such as 1712893835263803228; account-wide when omitted")
 	cmd.Flags().StringVar(&f.from, "from", "", "Range start, such as 2026-09-01T00:00:00Z")
 	cmd.Flags().StringVar(&f.to, "to", "", "Range end, such as 2026-09-18T00:00:00Z")
-	cmd.Flags().StringVar(&f.period, "period", "", "Relative period ending now, such as 30m, 24h, 7d, 4w")
+	cmd.Flags().StringVar(&f.period, "period", "", "Relative period ending now, at least 10m, such as 30m, 24h, 7d, 4w")
 	cmd.Flags().StringVar(&f.protocol, "protocol", "", "Protocol filter, such as ethereum")
 	cmd.Flags().StringVar(&f.network, "network", "", "Network filter: a full ID, or the network half with --protocol")
 	_ = cmd.RegisterFlagCompletionFunc("network", func(_ *cobra.Command, _ []string, prefix string) ([]string, cobra.ShellCompDirective) {
@@ -609,8 +609,8 @@ func (a *app) allowlistSetCommand() *cobra.Command {
 		return a.success(result)
 	}}
 	cmd.Flags().StringVarP(&project, "project", "p", "", "Required project ID, such as 1712893835263803228")
-	cmd.Flags().BoolVar(&ipRestrict, "ip-restrict", false, "Enable or disable IP restriction")
-	cmd.Flags().BoolVar(&domainRestrict, "domain-restrict", false, "Enable or disable domain restriction")
+	cmd.Flags().BoolVar(&ipRestrict, "ip-restrict", false, "Enable IP restriction; pass --ip-restrict=false to disable")
+	cmd.Flags().BoolVar(&domainRestrict, "domain-restrict", false, "Enable domain restriction; pass --domain-restrict=false to disable")
 	cmd.Flags().StringVar(&matchRule, "match-rule", "", "AND or OR")
 	_ = cmd.RegisterFlagCompletionFunc("match-rule", completeWords("AND OR"))
 	_ = cmd.MarkFlagRequired("project")
