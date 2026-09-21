@@ -183,8 +183,11 @@ func quotedName(text, prefix string) (string, bool) {
 	if !found {
 		return "", false
 	}
-	name, _, found := strings.Cut(rest, " ")
-	return strings.Trim(name, `"`), found
+	// The name is quoted, and a single argument can carry spaces, so the closing quote ends it.
+	// Cutting at the first space would report half of what was typed.
+	rest = strings.TrimPrefix(rest, `"`)
+	name, _, found := strings.Cut(rest, `"`)
+	return name, found
 }
 
 // Unknown flags are tolerated: this pass only looks for --output and leaves every
