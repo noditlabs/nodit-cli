@@ -88,10 +88,64 @@ func nearbyNetworks(id string) []string {
 		}
 	}
 	near := append(byChain, byName...)
+	// Nothing named or prefixed matches, so the input is more likely a misspelling than a partial
+	// name. A subcommand typo already gets this treatment; without it a one-letter slip in a
+	// network id only ever gets told to go read the list.
+	if len(near) == 0 {
+		near = misspelledNetworks(id)
+	}
 	if len(near) > 3 {
 		near = near[:3]
 	}
 	return near
+}
+
+// Catalog IDs within a couple of edits of what was typed, closest first. The same threshold the
+// command suggestions use, so an unrelated value such as polygon-amoy still suggests nothing.
+func misspelledNetworks(id string) []string {
+	const maxEdits = 2
+	type scored struct {
+		id    string
+		edits int
+	}
+	var near []scored
+	for _, n := range networks {
+		if d := editDistance(id, n.ID); d <= maxEdits {
+			near = append(near, scored{n.ID, d})
+		}
+	}
+	slices.SortFunc(near, func(a, b scored) int {
+		if a.edits != b.edits {
+			return a.edits - b.edits
+		}
+		return strings.Compare(a.id, b.id)
+	})
+	ids := make([]string, 0, len(near))
+	for _, s := range near {
+		ids = append(ids, s.id)
+	}
+	return ids
+}
+
+// Levenshtein distance over bytes, which is enough for catalog IDs: they are lowercase ASCII.
+func editDistance(a, b string) int {
+	previous := make([]int, len(b)+1)
+	current := make([]int, len(b)+1)
+	for j := range previous {
+		previous[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		current[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			current[j] = min(previous[j]+1, min(current[j-1]+1, previous[j-1]+cost))
+		}
+		previous, current = current, previous
+	}
+	return previous[len(b)]
 }
 
 func filterNetworks(chain, product string) ([]network, error) {

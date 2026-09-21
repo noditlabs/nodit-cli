@@ -412,17 +412,33 @@ func TestUnsupportedNetworkPointsAtRealIDs(t *testing.T) {
 		{"eth", "ethereum-mainnet"},
 		{"mainnet", "-mainnet"},
 		{"zzz", "nodit network list"},
+		// A misspelling is not a prefix of anything, so only the edit distance can catch it.
+		{"kaia-mainet", "kaia-mainnet"},
+		{"etherem-mainnet", "ethereum-mainnet"},
+		{"solana-devnett", "solana-devnet"},
+		// Far enough from every id that naming one would be a guess.
+		{"polygon-amoy", "nodit network list"},
 	} {
 		err := unsupportedNetwork(tc.id)
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%s: %v", tc.id, err)
 		}
 	}
-	// Every suggestion has to exist in the catalog.
-	for _, id := range nearbyNetworks("ethereum") {
-		if _, err := findNetwork(id); err != nil {
-			t.Fatalf("suggested a network that does not exist: %s", id)
+	// Every suggestion has to exist in the catalog, and no answer may run long.
+	for _, typed := range []string{"ethereum", "kaia-mainet", "mainnet", "sepolia"} {
+		near := nearbyNetworks(typed)
+		if len(near) > 3 {
+			t.Fatalf("%s suggested %d networks", typed, len(near))
 		}
+		for _, id := range near {
+			if _, err := findNetwork(id); err != nil {
+				t.Fatalf("suggested a network that does not exist: %s", id)
+			}
+		}
+	}
+	// The closest id comes first so the likely fix is the one that is read.
+	if near := nearbyNetworks("base-mainet"); len(near) == 0 || near[0] != "base-mainnet" {
+		t.Fatalf("closest suggestion was %v", near)
 	}
 }
 
