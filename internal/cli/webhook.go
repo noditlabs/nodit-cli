@@ -247,7 +247,7 @@ func (a *app) confirm(prompt string, yes bool) error {
 		return nil
 	}
 	if a.noInteractive {
-		return failure("INTERACTION_REQUIRED", "Confirmation is required.")
+		return failure("INTERACTION_REQUIRED", "Confirmation is required. Pass --yes to confirm without a prompt.")
 	}
 	_, _ = fmt.Fprint(a.stderr, prompt+" Type yes to continue: ")
 	line, err := bufio.NewReader(io.LimitReader(a.stdin, 16)).ReadString('\n')

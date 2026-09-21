@@ -95,6 +95,11 @@ func TestWebhookConfirmation(t *testing.T) {
 	if code, _, stderr := run(t, a, "webhook", "classic", "delete", "1", "-n", "ethereum-mainnet"); code != 0 || stderr == "" {
 		t.Fatalf("%d %s", code, stderr)
 	}
+	// Unattended, the prompt cannot be answered, so the refusal has to name the flag that replaces it.
+	a.noInteractive = true
+	if _, _, stderr := run(t, a, "webhook", "classic", "delete", "1", "-n", "ethereum-mainnet", "--no-interactive"); !strings.Contains(stderr, "--yes") {
+		t.Fatalf("no way past the prompt: %s", stderr)
+	}
 }
 
 func TestAddressExportIsAtomicAndDoesNotOverwrite(t *testing.T) {
@@ -119,7 +124,7 @@ func TestAddressExportIsAtomicAndDoesNotOverwrite(t *testing.T) {
 	if info, _ := os.Stat(target); info.Mode().Perm() != 0600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
-	if code, _, stderr := run(t, a, args...); code != 1 || !strings.Contains(stderr, "FILE_EXISTS") || calls != 1 {
+	if code, _, stderr := run(t, a, args...); code != 1 || !strings.Contains(stderr, "FILE_EXISTS") || !strings.Contains(stderr, "--file") || calls != 1 {
 		t.Fatalf("%d %d %s", code, calls, stderr)
 	}
 	content2, _ := os.ReadFile(target)

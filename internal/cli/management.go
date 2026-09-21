@@ -194,10 +194,10 @@ func (a *app) projectSelectCommand() *cobra.Command {
 		}
 		items, err := objectItems(projects)
 		if err != nil || len(items) != 1 || stringField(items[0], "projectId") != id {
-			return failure("PROJECT_NOT_FOUND", "Project was not found in this account.")
+			return failure("PROJECT_NOT_FOUND", "Project was not found in this account. List them with nodit project list.")
 		}
 		if stringField(items[0], "status") == "DELETED" {
-			return failure("PROJECT_NOT_ACTIVE", "A deleted project cannot be selected.")
+			return failure("PROJECT_NOT_ACTIVE", "A deleted project cannot be selected. List running projects with nodit project list.")
 		}
 		keyToUse := selectedKeyID
 		if keyToUse == "" {
@@ -223,7 +223,11 @@ func (a *app) projectSelectCommand() *cobra.Command {
 		}
 		key, ok := detail.(map[string]any)
 		if !ok || stringField(key, "keyId") != keyToUse || stringField(key, "projectId") != id || stringField(key, "status") != "ACTIVE" || stringField(key, "value") == "" {
-			return failure("INVALID_PROJECT_API_KEY", "The API key is not active, has no value, or belongs to another project.")
+			return failure(
+				"INVALID_PROJECT_API_KEY",
+				"The API key is not active, has no value, or belongs to another project. "+
+					"List active keys with nodit apikey list --project "+id+".",
+			)
 		}
 		credentialName := projectCredentialKey(id, keyToUse)
 		previous, previousErr := a.keys.Get(credentialName)

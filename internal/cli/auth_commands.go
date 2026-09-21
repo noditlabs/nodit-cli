@@ -8,7 +8,7 @@ func (a *app) authCommand() *cobra.Command {
 	r := asGroup(&cobra.Command{Use: "auth", Short: "Manage OAuth login"})
 	r.AddCommand(&cobra.Command{Use: "login", Short: "Log in using browser OAuth with PKCE", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return a.login(cmd.Context()) }})
 	r.AddCommand(&cobra.Command{Use: "status", Short: "Show local credential sources without revealing secrets", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
-		login := map[string]any{"source": "none", "status": "not_logged_in"}
+		login := map[string]any{"source": "none", "status": "not_logged_in", "nextStep": "Run nodit auth login."}
 		if a.getenv("NODIT_AUTH_TOKEN") != "" {
 			login = map[string]any{"source": "NODIT_AUTH_TOKEN", "status": "unverified"}
 		} else {
@@ -22,10 +22,19 @@ func (a *app) authCommand() *cobra.Command {
 					state = "expired"
 				}
 				login = map[string]any{"source": "credential_store", "status": state, "expiresAt": s.ExpiresAt, "refreshable": s.RefreshToken != ""}
+				// An expired session with a refresh token is renewed by the next command that needs
+				// it, so only a session that cannot be renewed asks for a new login.
+				if state == "expired" {
+					if s.RefreshToken != "" {
+						login["nextStep"] = "The next command that needs it renews this login. Run nodit auth login if that fails."
+					} else {
+						login["nextStep"] = "Run nodit auth login."
+					}
+				}
 			}
 		}
 		keySource := "none"
-		var keyProject, keyID string
+		var keyProject, keyID, keyNext string
 		if a.getenv("NODIT_API_KEY") != "" {
 			keySource = "NODIT_API_KEY"
 		} else {
@@ -45,11 +54,24 @@ func (a *app) authCommand() *cobra.Command {
 					}
 				}
 			}
+			// The wording follows what the same states report when a command actually needs the key.
+			switch {
+			case keySource != "none":
+			case keyProject == "":
+				keyNext = "Set NODIT_API_KEY, or run nodit auth login and nodit project select <project-id> to link one."
+			case keyID == "":
+				keyNext = "Run nodit project select " + keyProject + "."
+			default:
+				keyNext = "Run nodit project select " + keyProject + " to link the key again."
+			}
 		}
 		apiKeyStatus := map[string]any{"source": keySource, "configured": keySource != "none"}
 		if keyProject != "" {
 			apiKeyStatus["projectId"] = keyProject
 			apiKeyStatus["keyId"] = keyID
+		}
+		if keyNext != "" {
+			apiKeyStatus["nextStep"] = keyNext
 		}
 		return a.success(map[string]any{"oauth": login, "apiKey": apiKeyStatus})
 	}})

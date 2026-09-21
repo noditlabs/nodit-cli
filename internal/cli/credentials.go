@@ -91,7 +91,7 @@ func (a *app) loadSession() (*session, error) {
 	}
 	var s session
 	if json.Unmarshal([]byte(raw), &s) != nil || s.AccessToken == "" || s.ExpiresAt.IsZero() || s.Issuer != a.env.Issuer || s.Resource != a.env.Resource {
-		return nil, failure("INVALID_SESSION", "Saved login is invalid for this build.")
+		return nil, failure("INVALID_SESSION", "Saved login is invalid for this build. Run nodit auth login.")
 	}
 	return &s, nil
 }
@@ -134,7 +134,7 @@ func (a *app) accessToken(ctx context.Context) (string, error) {
 			return nil
 		}
 		if s.RefreshToken == "" {
-			return failure("AUTH_EXPIRED", "Saved login has expired.")
+			return failure("AUTH_EXPIRED", "Saved login has expired. Run nodit auth login.")
 		}
 		m, err := a.discover(ctx)
 		if err != nil {

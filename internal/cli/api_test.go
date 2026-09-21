@@ -303,6 +303,39 @@ func TestRPCParameterInputs(t *testing.T) {
 	}
 }
 
+func TestRejectedCredentialNamesTheWayOut(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		routes bool
+	}{{401, true}, {403, true}, {429, false}, {503, false}} {
+		a := newTestApp(t)
+		a.getenv = func(name string) string {
+			if name == "NODIT_API_KEY" {
+				return "sensitive-api-key"
+			}
+			return ""
+		}
+		mockAPI(a, func(*http.Request) (*http.Response, error) {
+			return response(tc.status, `{"message":"Authentication failed."}`), nil
+		})
+		_, _, e := run(t, a, "data", "native", "balance", "--address", testAddress, "-n", "ethereum-mainnet")
+		// The server wording is kept; the routes out are what the CLI adds to it.
+		if !strings.Contains(e, "Authentication failed.") {
+			t.Fatalf("%d dropped the server message: %s", tc.status, e)
+		}
+		if strings.Contains(e, "nodit auth status") != tc.routes {
+			t.Fatalf("%d routing %v: %s", tc.status, tc.routes, e)
+		}
+		if tc.status == 401 {
+			for _, want := range []string{"NODIT_API_KEY", "nodit auth login", "nodit project select"} {
+				if !strings.Contains(e, want) {
+					t.Fatalf("401 missing %q: %s", want, e)
+				}
+			}
+		}
+	}
+}
+
 func TestAPIErrorMappingAndNoCredentialLeak(t *testing.T) {
 	for _, tc := range []struct {
 		status     int
@@ -497,7 +530,7 @@ func TestAPITransportRedirectAndTimeout(t *testing.T) {
 	a.timeoutMS = 10
 	_, err := a.apiPost(context.Background(), server.URL+"/slow", "sensitive-api-key", map[string]int{"id": 1})
 	var ce *commandError
-	if !errors.As(err, &ce) || ce.Code != "TIMEOUT" {
+	if !errors.As(err, &ce) || ce.Code != "TIMEOUT" || !strings.Contains(ce.Message, "--timeout") {
 		t.Fatalf("unexpected timeout: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

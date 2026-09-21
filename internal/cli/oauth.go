@@ -126,7 +126,7 @@ func randomValue() (string, error) {
 
 func (a *app) login(ctx context.Context) error {
 	if a.noInteractive {
-		return failure("INTERACTION_REQUIRED", "Browser login requires interaction.")
+		return failure("INTERACTION_REQUIRED", "Browser login requires interaction. Run it without --no-interactive.")
 	}
 	if _, err := a.credentialPresent(sessionKey); err != nil {
 		return err

@@ -215,7 +215,7 @@ func (a *app) downloadCSV(ctx context.Context, endpoint, key, target string) err
 		return invalid("Cannot resolve the CSV file path.")
 	}
 	if _, err = os.Lstat(abs); err == nil {
-		return failure("FILE_EXISTS", "CSV target already exists.")
+		return failure("FILE_EXISTS", "CSV target already exists. Pass a new path with --file.")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return failure("FILE_WRITE_FAILED", "Cannot inspect the CSV target.")
 	}
@@ -266,7 +266,7 @@ func (a *app) downloadCSV(ctx context.Context, endpoint, key, target string) err
 	}
 	if err = os.Link(tmpName, abs); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return failure("FILE_EXISTS", "CSV target already exists.")
+			return failure("FILE_EXISTS", "CSV target already exists. Pass a new path with --file.")
 		}
 		return failure("FILE_WRITE_FAILED", "Cannot finalize the CSV file.")
 	}

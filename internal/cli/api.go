@@ -54,7 +54,7 @@ func (a *app) jsonRequest(ctx context.Context, method, endpoint, authHeader, cre
 		code, message := "API_REQUEST_FAILED", "API request failed."
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			code, message = "TIMEOUT", "API request timed out."
+			code, message = "TIMEOUT", "API request timed out. Raise the limit with --timeout."
 		}
 		return nil, nil, failure(code, message)
 	}
@@ -140,11 +140,18 @@ func retryDetails(headers http.Header) any {
 func apiFailure(status int, value any, headers http.Header) error {
 	e := failure("API_ERROR", "API rejected the request.")
 	e.HTTPStatus = status
+	// The server answers a rejected credential with its own wording, which says nothing about which
+	// credential this command used or how to change it. The hint is appended after the body is read
+	// so it survives the server message, and it names the same routes the local checks name.
+	hint := ""
 	switch status {
 	case 401:
 		e.Code = "AUTHENTICATION_FAILED"
+		hint = "See which credential this used with nodit auth status. Set a working one with " +
+			"NODIT_API_KEY, or run nodit auth login and nodit project select <project-id> to link one."
 	case 403:
 		e.Code = "PERMISSION_DENIED"
+		hint = "See which credential this used with nodit auth status."
 	case 429:
 		// The gateway sends the rate limit headers on every response, so they are
 		// only worth reporting on the status where the caller has to act on them.
@@ -168,6 +175,9 @@ func apiFailure(status int, value any, headers http.Header) error {
 		if details, ok := problem["details"].(map[string]any); ok && e.Details == nil && len(details) > 0 {
 			e.Details = details
 		}
+	}
+	if hint != "" {
+		e.Message = strings.TrimSuffix(e.Message, " ") + " " + hint
 	}
 	return e
 }

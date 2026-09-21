@@ -97,7 +97,7 @@ func (a *app) execute(ctx context.Context, args []string) int {
 			ce = failure("CANCELLED", "Command cancelled.")
 			ce.exit = 130
 		case errors.Is(err, context.DeadlineExceeded):
-			ce = failure("TIMEOUT", "Command timed out.")
+			ce = failure("TIMEOUT", "Command timed out. Raise the limit with --timeout.")
 		default:
 			ce = usageError(cmd, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testKeyID = "3f2b1a90-77c4-4e2e-9a11-8d0b6c5e4f21"
@@ -289,6 +290,51 @@ func TestProjectSelectListsKeysWhenSeveralAreActive(t *testing.T) {
 		if !strings.Contains(e, want) {
 			t.Fatalf("missing %q: %s", want, e)
 		}
+	}
+}
+
+func TestProjectSelectRefusalsNameTheNextCommand(t *testing.T) {
+	for _, tc := range []struct {
+		name, projects, keyDetail, want string
+	}{
+		{"missing", `{"count":0,"items":[]}`, "", "nodit project list"},
+		{"deleted", `{"count":1,"items":[{"projectId":"123","status":"DELETED"}]}`, "", "nodit project list"},
+		{
+			"unusable key",
+			`{"count":1,"items":[{"projectId":"123","status":"RUNNING"}]}`,
+			`{"keyId":"` + testKeyID + `","projectId":"123","status":"DELETED","value":"v"}`,
+			"nodit apikey list --project 123",
+		},
+	} {
+		a := managementTestApp(t)
+		mockAPI(a, func(r *http.Request) (*http.Response, error) {
+			switch r.URL.Path {
+			case "/v1/projects":
+				return response(200, tc.projects), nil
+			case "/v1/api-keys":
+				return response(200, `{"count":1,"items":[{"keyId":"`+testKeyID+`","projectId":"123","status":"ACTIVE"}]}`), nil
+			case "/v1/api-keys/" + testKeyID:
+				return response(200, tc.keyDetail), nil
+			}
+			t.Fatalf("unexpected call: %s", r.URL.Path)
+			return nil, nil
+		})
+		if c, out, e := run(t, a, "project", "select", "123"); c != 1 || out != "" || !strings.Contains(e, tc.want) {
+			t.Fatalf("%s: %d %s %s", tc.name, c, out, e)
+		}
+	}
+}
+
+func TestASessionFromAnotherBuildNamesTheNextCommand(t *testing.T) {
+	// No NODIT_AUTH_TOKEN here: the saved session is what the command has to fall back on.
+	a := newTestApp(t)
+	a.getenv = func(string) string { return "" }
+	mockAPI(a, func(r *http.Request) (*http.Response, error) { t.Fatalf("reached %s", r.URL.Path); return nil, nil })
+	if err := a.saveSession(&session{AccessToken: "a", ExpiresAt: time.Now().Add(time.Hour), Issuer: "https://other.example.com", Resource: a.env.Resource}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _, e := run(t, a, "project", "list"); c != 1 || !strings.Contains(e, "INVALID_SESSION") || !strings.Contains(e, "nodit auth login") {
+		t.Fatalf("%d %s", c, e)
 	}
 }
 

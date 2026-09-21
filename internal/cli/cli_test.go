@@ -234,9 +234,74 @@ func TestCredentialsStayOutOfOutputAndConfig(t *testing.T) {
 	}
 }
 
+func TestAuthStatusLeadsSomewhereFromEveryEmptyState(t *testing.T) {
+	a := newTestApp(t)
+	c, out, e := run(t, a, "auth", "status")
+	if c != 0 || e != "" {
+		t.Fatalf("%d %s", c, e)
+	}
+	// Nothing is configured, so both halves have to name the command that configures them.
+	for _, want := range []string{"not_logged_in", "Run nodit auth login.", "NODIT_API_KEY", "nodit project select"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+	// A login that cannot renew itself asks for a new one instead of only reporting the expiry.
+	if err := a.saveSession(&session{AccessToken: "a", ExpiresAt: time.Now().Add(-time.Hour), Issuer: a.env.Issuer, Resource: a.env.Resource}); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, _ = run(t, a, "auth", "status"); !strings.Contains(out, "expired") || !strings.Contains(out, "Run nodit auth login.") {
+		t.Fatalf("expired session without a way out: %s", out)
+	}
+	if _, err := a.accessToken(t.Context()); err == nil || !strings.Contains(err.Error(), "nodit auth login") {
+		t.Fatalf("expired token error without a way out: %v", err)
+	}
+}
+
+func TestAuthStatusLeadsSomewhereFromAHalfLinkedProject(t *testing.T) {
+	for _, tc := range []struct{ name, keyID string }{{"never linked", ""}, {"missing from the store", testKeyID}} {
+		a := newTestApp(t)
+		a.getenv = func(string) string { return "" }
+		if err := a.config.update(t.Context(), func(c *config) error {
+			c.Project = "123"
+			if tc.keyID != "" {
+				c.ProjectKeys = map[string]string{"123": tc.keyID}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		_, out, _ := run(t, a, "auth", "status")
+		if !strings.Contains(out, "nodit project select 123") {
+			t.Fatalf("%s: %s", tc.name, out)
+		}
+	}
+}
+
+func TestADeadlineNamesTheFlagThatRaisesIt(t *testing.T) {
+	a := newTestApp(t)
+	a.getenv = func(name string) string {
+		if name == "NODIT_API_KEY" {
+			return "product-key"
+		}
+		return ""
+	}
+	// The transport fails while the deadline is already past, which is what a real timeout looks like
+	// from here: the context error reaches the top untouched instead of an API failure.
+	mockAPI(a, func(*http.Request) (*http.Response, error) { return nil, errors.New("transport gave up") })
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	a.stdout, a.stderr = &bytes.Buffer{}, &bytes.Buffer{}
+	code := a.execute(ctx, []string{"data", "native", "balance", "--address", testAddress, "-n", "ethereum-mainnet"})
+	e := a.stderr.(*bytes.Buffer).String()
+	if code == 0 || !strings.Contains(e, "TIMEOUT") || !strings.Contains(e, "--timeout") {
+		t.Fatalf("%d %s", code, e)
+	}
+}
+
 func TestHeadlessAndUnavailableKeyring(t *testing.T) {
 	a := newTestApp(t)
-	if c, out, e := run(t, a, "auth", "login", "--no-interactive"); c != 1 || out != "" || !strings.Contains(e, "INTERACTION_REQUIRED") {
+	if c, out, e := run(t, a, "auth", "login", "--no-interactive"); c != 1 || out != "" || !strings.Contains(e, "INTERACTION_REQUIRED") || !strings.Contains(e, "--no-interactive") {
 		t.Fatalf("%d %s %s", c, out, e)
 	}
 	a.keys.(*fakeKeys).err = errors.New("keychain unavailable and sensitive diagnostics")
