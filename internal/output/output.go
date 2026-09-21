@@ -13,12 +13,24 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// json.Marshal escapes <, > and & for embedding in HTML. This output goes to a terminal and to
+// tools like jq, where the escapes only make a placeholder such as <project-id> harder to read.
+func marshal(value any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
 func Valid(format string) bool {
 	return format == "yaml" || format == "json" || format == "jsonl" || format == "toon"
 }
 
 func Write(w io.Writer, format string, value any) error {
-	b, err := json.Marshal(value)
+	b, err := marshal(value)
 	if err != nil {
 		return err
 	}
