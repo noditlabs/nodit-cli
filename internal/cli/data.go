@@ -121,6 +121,10 @@ func (a *app) dataLeaf(spec dataSpec) *cobra.Command {
 		Long:    dataLong(spec, ids),
 		Example: "  nodit data " + spec.group + " " + spec.name + " " + spec.example + " -n " + exampleNetwork(ids),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			key, err := a.apiKey(flags.apiKey)
+			if err != nil {
+				return err
+			}
 			n, err := a.productNetwork(flags.network, "data")
 			if err != nil {
 				return err
@@ -129,10 +133,6 @@ func (a *app) dataLeaf(spec dataSpec) *cobra.Command {
 				return unsupportedOperation("This Data API command is not supported on the selected network.")
 			}
 			operation, body, err := dataRequest(cmd, spec, n, v)
-			if err != nil {
-				return err
-			}
-			key, err := a.apiKey(flags.apiKey)
 			if err != nil {
 				return err
 			}

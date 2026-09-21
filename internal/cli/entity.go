@@ -18,6 +18,10 @@ func (a *app) entityLookupCommand() *cobra.Command {
 		Long:    "Identify an input across multiple networks. --networks is required.\nThe input and the API's input/items/normalizedInput fields are preserved.\nThis command ignores NODIT_NETWORK and config.network; --network is not accepted.\nSupported networks: " + strings.Join(strings.Fields(lookupNetworks), ", ") + ".",
 		Example: "  nodit data entity lookup 0x000000000000000000000000000000000000dEaD --networks ethereum-mainnet,base-mainnet",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			key, err := a.apiKey(flags.apiKey)
+			if err != nil {
+				return err
+			}
 			if cmd.Flags().Changed("network") {
 				return invalid("Entity lookup requires --networks, not --network.")
 			}
@@ -36,10 +40,6 @@ func (a *app) entityLookupCommand() *cobra.Command {
 					return invalid("--networks cannot contain duplicate IDs.")
 				}
 				seen[id] = true
-			}
-			key, err := a.apiKey(flags.apiKey)
-			if err != nil {
-				return err
 			}
 			result, err := a.apiPost(cmd.Context(), "https://web3."+a.env.Domain+"/v1/multichain/lookupEntities", key, map[string]any{"input": args[0], "chains": ids})
 			if err != nil {

@@ -40,6 +40,10 @@ func (a *app) streamCommand() *cobra.Command {
 		Long:    "Connect to Nodit Stream, register one Classic event type, and print control and delivery events.\nOnly YAML and JSONL can represent the unbounded output. --messages limits delivered\nsubscription_event records; omitted means watch until interrupted. The HTTP timeout applies\nto connection establishment only. The CLI does not reconnect or replay missed events.",
 		Example: "  nodit stream watch --network ethereum-mainnet --event-type ADDRESS_ACTIVITY --condition '{\"addresses\":[\"0x000000000000000000000000000000000000dEaD\"]}' --output jsonl",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			key, err := a.apiKey(flags.apiKey)
+			if err != nil {
+				return err
+			}
 			if a.format != "yaml" && a.format != "jsonl" {
 				return invalid("Stream output must be yaml or jsonl.")
 			}
@@ -60,10 +64,6 @@ func (a *app) streamCommand() *cobra.Command {
 				return invalid("--condition must contain exactly one JSON object.")
 			}
 			n, err := a.productNetwork(flags.network, "stream")
-			if err != nil {
-				return err
-			}
-			key, err := a.apiKey(flags.apiKey)
 			if err != nil {
 				return err
 			}

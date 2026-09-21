@@ -321,8 +321,27 @@ func TestRESTNonJSONAndRedirect(t *testing.T) {
 	}
 }
 
-func TestAptosVersionBeyondUint64IsRejectedLocally(t *testing.T) {
+func TestACredentialIsCheckedBeforeArgumentFormat(t *testing.T) {
 	a := newTestApp(t)
+	a.getenv = func(string) string { return "" }
+	mockAPI(a, func(*http.Request) (*http.Response, error) {
+		t.Fatal("the request left the CLI")
+		return nil, nil
+	})
+	// Without a key the address can never be made to work, so the key is what the caller hears about.
+	for _, args := range [][]string{
+		{"data", "native", "balance", "--address", "notanaddress", "-n", "ethereum-mainnet"},
+		{"rpc", "eth_blockNumber", "-n", "bogus-network"},
+	} {
+		if c, out, e := run(t, a, args...); c != 1 || out != "" || !strings.Contains(e, "API_KEY_REQUIRED") {
+			t.Fatalf("%v: %d %s %s", args, c, out, e)
+		}
+	}
+}
+
+func TestAptosVersionBeyondUint64IsRejectedLocally(t *testing.T) {
+	// A key is present so the run reaches the argument checks; the missing-key case is its own test.
+	a := productTestApp(t)
 	mockAPI(a, func(*http.Request) (*http.Response, error) {
 		t.Fatal("the request left the CLI")
 		return nil, nil

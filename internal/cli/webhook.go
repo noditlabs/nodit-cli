@@ -55,16 +55,16 @@ func (a *app) webhookListCommand(kind webhookKind) *cobra.Command {
 	var flags productFlags
 	page, rpp := 1, 10
 	cmd := &cobra.Command{Use: "list", Short: "List webhooks on one network", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		n, err := a.productNetwork(flags.network, "webhook")
 		if err != nil {
 			return err
 		}
 		if page < 1 || rpp < 1 || rpp > 100 {
 			return invalid("--page must be positive and --rpp must be 1-100.")
-		}
-		key, err := a.apiKey(flags.apiKey)
-		if err != nil {
-			return err
 		}
 		u, _ := url.Parse(a.webhookEndpoint(n, kind, ""))
 		q := u.Query()
@@ -89,14 +89,14 @@ func (a *app) webhookListCommand(kind webhookKind) *cobra.Command {
 func (a *app) webhookGetCommand(kind webhookKind) *cobra.Command {
 	var flags productFlags
 	cmd := &cobra.Command{Use: "get <id>", Short: "Get one webhook", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if err := validID(args[0]); err != nil {
 			return err
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -131,6 +131,10 @@ func (a *app) webhookBodyCommand(kind webhookKind, action string) *cobra.Command
 		args = helpOnNoArgs(cobra.ExactArgs(1))
 	}
 	cmd := &cobra.Command{Use: use, Short: short, Args: args, RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if !cmd.Flags().Changed("network") {
 			return invalid("Create and update require an explicit --network.")
 		}
@@ -146,10 +150,6 @@ func (a *app) webhookBodyCommand(kind webhookKind, action string) *cobra.Command
 			return err
 		}
 		body, err := webhookBody(flags.body, kind, action)
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -211,6 +211,10 @@ func webhookBody(value string, kind webhookKind, action string) (json.RawMessage
 func (a *app) webhookDeleteCommand(kind webhookKind) *cobra.Command {
 	var flags webhookFlags
 	cmd := &cobra.Command{Use: "delete <id>", Short: "Delete one webhook", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if !cmd.Flags().Changed("network") {
 			return invalid("Delete requires an explicit --network.")
 		}
@@ -221,10 +225,6 @@ func (a *app) webhookDeleteCommand(kind webhookKind) *cobra.Command {
 			return err
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -287,6 +287,10 @@ func (a *app) classicHistoryCommand() *cobra.Command {
 	var status, startAt, endAt, startSequence string
 	var withMessage bool
 	cmd := &cobra.Command{Use: "history <id>", Short: "List Classic Webhook delivery history", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -304,10 +308,6 @@ func (a *app) classicHistoryCommand() *cobra.Command {
 			}
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -353,14 +353,14 @@ func (a *app) flexibleStreamsCommand() *cobra.Command {
 	var flags productFlags
 	page, rpp := 1, 10
 	cmd := &cobra.Command{Use: "streams", Short: "List Flexible Webhook stream definitions", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if page < 1 || rpp < 1 || rpp > 100 {
 			return invalid("--page must be positive and --rpp must be 1-100.")
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -384,14 +384,14 @@ func (a *app) flexibleStreamsCommand() *cobra.Command {
 func (a *app) flexibleSchemaCommand() *cobra.Command {
 	var flags productFlags
 	cmd := &cobra.Command{Use: "schema <stream-id>", Short: "Get a Flexible Webhook stream schema", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if err := validID(args[0]); err != nil {
 			return err
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}

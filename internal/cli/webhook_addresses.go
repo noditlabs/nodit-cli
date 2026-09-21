@@ -66,6 +66,10 @@ func (a *app) addressListCommand() *cobra.Command {
 	var flags productFlags
 	var q addressQuery
 	cmd := &cobra.Command{Use: "list <id>", Short: "List ADDRESS_ACTIVITY addresses", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -73,10 +77,6 @@ func (a *app) addressListCommand() *cobra.Command {
 			return err
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -96,6 +96,10 @@ func (a *app) addressListCommand() *cobra.Command {
 func (a *app) addressUpdateCommand() *cobra.Command {
 	var flags webhookFlags
 	cmd := &cobra.Command{Use: "update <id>", Short: "Add and remove ADDRESS_ACTIVITY addresses", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if !cmd.Flags().Changed("network") {
 			return invalid("Address update requires an explicit --network.")
 		}
@@ -112,10 +116,6 @@ func (a *app) addressUpdateCommand() *cobra.Command {
 			}
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
@@ -178,6 +178,10 @@ func (a *app) addressExportCommand() *cobra.Command {
 	var q addressQuery
 	var file string
 	cmd := &cobra.Command{Use: "export <id>", Short: "Download ADDRESS_ACTIVITY addresses as CSV", Args: helpOnNoArgs(cobra.ExactArgs(1)), RunE: func(cmd *cobra.Command, args []string) error {
+		key, err := a.apiKey(flags.apiKey)
+		if err != nil {
+			return err
+		}
 		if err := validID(args[0]); err != nil {
 			return err
 		}
@@ -188,10 +192,6 @@ func (a *app) addressExportCommand() *cobra.Command {
 			return invalid("--file is required.")
 		}
 		n, err := a.productNetwork(flags.network, "webhook")
-		if err != nil {
-			return err
-		}
-		key, err := a.apiKey(flags.apiKey)
 		if err != nil {
 			return err
 		}
