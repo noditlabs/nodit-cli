@@ -49,6 +49,9 @@ func (a *app) entityLookupCommand() *cobra.Command {
 		},
 	}
 	flags.bind(cmd)
+	// --network comes with the shared product flags but is rejected here, so it is kept out of the
+	// help and the completions rather than offered as something this command takes.
+	_ = cmd.Flags().MarkHidden("network")
 	cmd.Flags().StringSliceVar(&ids, "networks", nil, "Required comma-separated network IDs; ignores the default network")
 	return cmd
 }
