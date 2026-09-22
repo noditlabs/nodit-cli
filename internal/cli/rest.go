@@ -98,7 +98,7 @@ func (a *app) restCommand() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
 		Use: "rest <method> <path>", Short: "Call Aptos, Cosmos SDK, CometBFT, or Tron Node REST", Args: helpOnNoArgs(cobra.ExactArgs(2)),
-		Long:    "Call a Node REST endpoint using an API key. Supports catalog Aptos, Cosmos, and Tron networks.\nAptos paths are relative to /v1; Cosmos SDK paths start with /cosmos/ (Initia also /initia/);\nCometBFT paths include /status, /block, /tx and other documented methods;\nTron paths start with /wallet/ or /walletsolidity/.\nUse repeated --query key=value options, --body for inline JSON, or --body-file for a JSON file.\nWhen no body option is given, piped input is used. GET bodies are rejected.\nSuccess includes the original JSON body and safe ledger, cursor, and rate limit headers.\nBinary BCS is unsupported. Requests never follow redirects or retry automatically.\nSome GET routes, including CometBFT broadcasts, can change blockchain state.",
+		Long:    "Call a Node REST endpoint using an API key. Supports catalog Aptos, Cosmos, and Tron networks.\nAptos paths are relative to /v1; Cosmos SDK paths start with /cosmos/ (Initia also /initia/);\nCometBFT paths include /status, /block, /tx and other documented methods;\nTron paths start with /wallet/ or /walletsolidity/.\nUse repeated --query key=value options, --body for inline JSON, or --body-file for a JSON file.\nOn a write method, piped input is used when no body option is given. GET bodies are rejected.\nSuccess includes the original JSON body and safe ledger, cursor, and rate limit headers.\nBinary BCS is unsupported. Requests never follow redirects or retry automatically.\nSome GET routes, including CometBFT broadcasts, can change blockchain state.",
 		Example: "  nodit rest GET /accounts/0x1/resources -n aptos-mainnet --query limit=1\n  nodit rest GET /block -n cosmos-mainnet\n  nodit rest POST /view -n aptos-mainnet --body-file request.json\n  nodit rest POST /wallet/getnowblock -n tron-mainnet --body '{}'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key, err := a.apiKey(flags.apiKey)
@@ -135,7 +135,9 @@ func (a *app) restCommand() *cobra.Command {
 				return invalid("GET requests cannot contain a body.")
 			}
 			var requestBody any
-			if bodySet || bodyFileSet || a.stdinRedirected {
+			// A GET carries no body, so inherited stdin, such as a pipe in a script, is not read
+			// as one. --body and --body-file are already rejected above.
+			if bodySet || bodyFileSet || (a.stdinRedirected && method != http.MethodGet) {
 				var raw []byte
 				if bodySet {
 					raw, err = readInlineJSON(body)
@@ -148,9 +150,6 @@ func (a *app) restCommand() *cobra.Command {
 					return err
 				}
 				if len(raw) > 0 {
-					if method == http.MethodGet {
-						return invalid("GET requests cannot contain a body.")
-					}
 					requestBody = json.RawMessage(raw)
 				}
 			}

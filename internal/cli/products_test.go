@@ -239,6 +239,18 @@ func TestRESTContractAndHeaders(t *testing.T) {
 	if c != 0 || !strings.Contains(out, `"body": null`) {
 		t.Fatalf("%d %s %s", c, out, e)
 	}
+	// A GET carries no body, so inherited stdin, such as a pipe in a script, is not read as one.
+	mockAPI(a, func(r *http.Request) (*http.Response, error) {
+		if r.Method != "GET" || r.Header.Get("Content-Type") != "" {
+			t.Fatalf("stdin reached a GET: %s", r.Method)
+		}
+		return response(200, `{}`), nil
+	})
+	a.stdin = strings.NewReader("not json at all")
+	c, out, e = run(t, a, "rest", "GET", "/accounts/0x1", "-n", "aptos-mainnet", "-o", "json")
+	if c != 0 || !strings.Contains(out, `"body"`) {
+		t.Fatalf("%d %s %s", c, out, e)
+	}
 }
 
 func TestRESTRejectsAmbiguityAndUnsafePaths(t *testing.T) {
@@ -265,11 +277,6 @@ func TestRESTRejectsAmbiguityAndUnsafePaths(t *testing.T) {
 		if c, out, e := run(t, a, args...); c != 2 || out != "" {
 			t.Fatalf("%v: %d %s %s", args, c, out, e)
 		}
-	}
-	a.stdin = strings.NewReader(`{"value":1}`)
-	a.stdinRedirected = true
-	if c, out, e := run(t, a, "rest", "GET", "/accounts/0x1", "-n", "aptos-mainnet"); c != 2 || out != "" {
-		t.Fatalf("piped GET body: %d %s %s", c, out, e)
 	}
 }
 
