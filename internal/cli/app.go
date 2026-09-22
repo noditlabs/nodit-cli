@@ -264,6 +264,10 @@ func (a *app) command() *cobra.Command {
 	r.AddCommand(a.configCommand(), a.networkCommand(), a.authCommand(), a.projectCommand(), a.apiKeyCommand(), a.usageCommand(), a.allowlistCommand(), a.dataCommand(), a.rpcCommand(), a.restCommand(), a.webhookCommand(), a.streamCommand(), &cobra.Command{Use: "version", Short: "Show version", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error {
 		return a.version()
 	}})
+	// cobra builds the completion command during Execute, too late to edit its help, so it is built
+	// here instead and the generated setup text replaced.
+	r.InitDefaultCompletionCmd()
+	rewriteCompletionHelp(r)
 	return r
 }
 
