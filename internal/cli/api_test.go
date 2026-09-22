@@ -443,6 +443,31 @@ func TestServerDetailsReachTheErrorOutput(t *testing.T) {
 	}
 }
 
+func TestJSONRPCShapedErrorKeepsItsData(t *testing.T) {
+	a := newTestApp(t)
+	a.getenv = func(string) string { return "" }
+	mockAPI(a, func(*http.Request) (*http.Response, error) {
+		// CometBFT answers REST in the JSON-RPC shape, stating the reason in data, not details.
+		return response(500, `{"jsonrpc":"2.0","id":-1,"error":{"code":-32603,"message":"Internal error",`+
+			`"data":"height 100 is not available, lowest height is 32084196"}}`), nil
+	})
+	c, out, e := run(t, a, "rest", "GET", "/block", "-n", "cosmos-mainnet", "--api-key", "k", "-o", "json")
+	if c != 1 || out != "" {
+		t.Fatalf("%d %s %s", c, out, e)
+	}
+	var result struct {
+		Error struct {
+			Details string `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(e), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Error.Details, "lowest height is 32084196") {
+		t.Fatalf("%s", e)
+	}
+}
+
 func TestNonRateLimitErrorOmitsDetails(t *testing.T) {
 	a := newTestApp(t)
 	a.getenv = func(string) string { return "" }

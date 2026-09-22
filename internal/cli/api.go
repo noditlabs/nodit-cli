@@ -205,8 +205,14 @@ func apiFailure(status int, value any, headers http.Header) error {
 			e.Message = message
 		}
 		// Already filled from the rate limit headers on 429, which is the more specific source there.
-		if details, ok := problem["details"].(map[string]any); ok && e.Details == nil && len(details) > 0 {
-			e.Details = details
+		if e.Details == nil {
+			if details, ok := problem["details"].(map[string]any); ok && len(details) > 0 {
+				e.Details = details
+			} else if data := problem["data"]; data != nil {
+				// CometBFT answers REST in the JSON-RPC shape, which states the reason in data
+				// rather than details. Without it the error says only that something failed.
+				e.Details = data
+			}
 		}
 	}
 	if hint != "" {
