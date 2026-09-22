@@ -57,6 +57,11 @@ Open a new terminal so the updated `PATH` applies, then:
 nodit version
 ```
 
+### Tab completion
+
+The installer prints the setup for your shell, and `nodit completion --help` covers all four.
+It is a few lines to run once, because a shell loads completions only from where it already looks.
+
 ### What the installer does
 
 It downloads the archive for your platform and checks it against the release `checksums.txt`,

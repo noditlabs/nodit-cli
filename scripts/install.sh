@@ -156,8 +156,39 @@ path_command() {
 	esac
 }
 
+# Nothing here is run for the caller: completion means editing a startup file and a shell the
+# installer is not running in, and PATH is already as far into those files as an installer should go.
+# $SHELL is the only hint available, so an unrecognized shell says nothing rather than guessing.
+completion_setup() {
+	case "${SHELL:-}" in
+	*/zsh)
+		echo "Enable tab completion, once:"
+		echo "  mkdir -p ~/.zfunc"
+		echo "  nodit completion zsh > ~/.zfunc/_nodit"
+		echo "Then add these two lines to ${rc:-~/.zshrc}:"
+		echo "  fpath=(~/.zfunc \$fpath)"
+		echo "  autoload -Uz compinit && compinit"
+		;;
+	*/bash)
+		echo "Enable tab completion, once:"
+		echo "  mkdir -p ~/.bash_completion.d"
+		echo "  nodit completion bash > ~/.bash_completion.d/nodit"
+		echo "Then add this line to ${rc:-~/.bashrc}:"
+		echo "  source ~/.bash_completion.d/nodit"
+		;;
+	*/fish)
+		echo "Enable tab completion, once:"
+		echo "  mkdir -p ~/.config/fish/completions"
+		echo "  nodit completion fish > ~/.config/fish/completions/nodit.fish"
+		;;
+	*) return ;;
+	esac
+	echo "Open a new shell for it to take effect. Other shells: nodit completion --help"
+}
+
 # The next step comes last, so it is what the caller is left looking at.
 next_step() {
+	completion_setup
 	echo "Then run: nodit auth login, or nodit --help"
 	exit 0
 }
