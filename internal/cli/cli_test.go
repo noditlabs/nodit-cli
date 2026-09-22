@@ -464,6 +464,9 @@ func TestArgumentAndCommandErrorsPointSomewhere(t *testing.T) {
 		{[]string{"webhook", "clasic"}, "Did you mean classic?"},
 		{[]string{"netwrok"}, "Did you mean network?"},
 		{[]string{"bogus"}, "Run nodit --help."},
+		{[]string{"usage", "timeseries", "--interval", "1h"}, "Run nodit usage timeseries --help."},
+		{[]string{"apikey", "get", "x", "--bogus"}, "Run nodit apikey get --help."},
+		{[]string{"--bogus"}, "Run nodit --help."},
 	} {
 		a := newTestApp(t)
 		a.execute(t.Context(), tc.args)

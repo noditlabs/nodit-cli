@@ -247,7 +247,11 @@ func (a *app) command() *cobra.Command {
 	// cobra's own Version field prints outside the data envelope and ignores --output,
 	// so the flag routes to the same handler as the subcommand.
 	r.Flags().BoolVar(&showVersion, "version", false, "Show version")
-	r.SetFlagErrorFunc(func(_ *cobra.Command, _ error) error { return invalid("Invalid flag or flag value. Run nodit --help.") })
+	// The root help does not list a subcommand's flags, so the command that rejected the flag is
+	// the one worth naming, the same way a missing required flag names it.
+	r.SetFlagErrorFunc(func(cmd *cobra.Command, _ error) error {
+		return invalid("Invalid flag or flag value. Run " + cmd.CommandPath() + " --help.")
+	})
 	r.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if !output.Valid(a.format) {
 			return invalid("Output must be yaml, json, jsonl, or toon.")
