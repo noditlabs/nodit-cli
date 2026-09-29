@@ -654,6 +654,10 @@ func (a *app) allowlistEntryCommand(add bool) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if !add && result == nil {
+			// The endpoint answers 204 with no body, which would print as data: null.
+			return a.success(map[string]any{"projectId": project, "type": kind, "value": args[0], "removed": true})
+		}
 		return a.success(result)
 	}}
 	cmd.Flags().StringVarP(&project, "project", "p", "", "Required project ID, such as 1712893835263803228")

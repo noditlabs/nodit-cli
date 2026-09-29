@@ -171,9 +171,13 @@ func TestManagementMutations(t *testing.T) {
 			}
 			return response(200, `{"projectId":"123"}`), nil
 		})
-		code, _, stderr := run(t, a, tc.args...)
+		code, stdout, stderr := run(t, a, tc.args...)
 		if code != 0 {
 			t.Fatal(stderr)
+		}
+		// The 204 has no body, so the output has to say what was removed.
+		if tc.method == "DELETE" && (!strings.Contains(stdout, "removed: true") || !strings.Contains(stdout, `value: "example.com"`)) {
+			t.Fatalf("remove output: %s", stdout)
 		}
 	}
 }
