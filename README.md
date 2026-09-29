@@ -9,7 +9,7 @@ OAuth-based Management API and the API Key-based Product APIs.
 - The bundled catalog of networks and the products each one supports
 - Web3 Data API and multichain entity lookups
 - Single JSON-RPC calls against Node
-- REST Node APIs for Aptos and Cosmos SDK chains
+- REST Node APIs for Aptos, Cosmos SDK and Tron chains
 - Classic and Flexible webhook management
 - Classic `ADDRESS_ACTIVITY` address lists
 - Watching Nodit Stream over a websocket
