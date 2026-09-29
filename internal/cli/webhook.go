@@ -163,6 +163,22 @@ func (a *app) webhookBodyCommand(kind webhookKind, action string) *cobra.Command
 		return a.success(result)
 	}}
 	flags.bind(cmd)
+	// Unlike classic, whose schema command prints a complete body, nothing else shows these fields.
+	if kind.isFlexible() && action == "create" {
+		cmd.Long = "Create a Flexible Webhook from a JSON body.\n" +
+			"Required: name, streamId, filterExpression, destination. Optional: description,\n" +
+			"status (ACTIVE or PAUSED), receiveFields.\n" +
+			"streamId comes from nodit webhook flexible streams. filterExpression is CEL over the fields that\n" +
+			"nodit webhook flexible schema <stream-id> lists under filterFields; address fields compare with\n" +
+			"address_eq, and bigint fields with bigint_eq, bigint_gt and the like.\n" +
+			"The server decides what it accepts."
+		cmd.Example = `  nodit webhook flexible create -n ethereum-mainnet --body '{"name":"busy blocks","streamId":"75","filterExpression":"transaction_count > 300","destination":"https://example.com/hook"}'`
+	} else if kind.isFlexible() && action == "update" {
+		cmd.Long = "Update a Flexible Webhook from a JSON body.\n" +
+			"Only name, description, and status (ACTIVE or PAUSED) can change. Create a new webhook to\n" +
+			"change the stream, filter or destination."
+		cmd.Example = `  nodit webhook flexible update 5863235738273684036 -n ethereum-mainnet --body '{"status":"PAUSED"}'`
+	}
 	bodyHelp := "Required JSON object or @file using API-specific fields"
 	if kind.isFlexible() {
 		bodyHelp += "; see nodit webhook flexible streams and schema"
