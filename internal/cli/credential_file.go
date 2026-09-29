@@ -40,6 +40,7 @@ func (s fallbackCredentialStore) Get(key string) (string, error) {
 	}
 	value, primaryErr := s.primary.Get(key)
 	if primaryErr == nil {
+		s.markKeyringUsed()
 		return value, nil
 	}
 	if errors.Is(primaryErr, keyring.ErrNotFound) {
@@ -47,7 +48,7 @@ func (s fallbackCredentialStore) Get(key string) (string, error) {
 	}
 	value, fallbackErr := s.fallback.Get(key)
 	if errors.Is(fallbackErr, keyring.ErrNotFound) {
-		return "", primaryErr
+		return "", s.keyringReadFailure(primaryErr)
 	}
 	return value, fallbackErr
 }
@@ -61,6 +62,7 @@ func (s fallbackCredentialStore) Set(key, value string) error {
 		return nil
 	}
 	if err := s.primary.Set(key, value); err == nil {
+		s.markKeyringUsed()
 		return nil
 	}
 	return s.fallback.Set(key, value)
@@ -71,7 +73,35 @@ func (s fallbackCredentialStore) Delete(key string) error {
 		_ = s.primary.Delete(key)
 		return s.fallback.Delete(key)
 	}
+	// Unlike a read, a failed delete is never taken as done: a logout that reports a removal which
+	// did not happen is worse than one that fails.
 	return s.primary.Delete(key)
+}
+
+// A keyring this CLI never stored in or read from, as on a server with no Secret Service or a
+// platform go-keyring does not support, holds nothing of ours, so a read that fails there answers
+// as absence. Once it has held a value, the failure is reported: a locked keychain or a closed
+// password manager still keeps what it holds. Earlier versions wrote no mark, so a keyring they
+// filled counts as unused until its first successful read.
+func (s fallbackCredentialStore) keyringReadFailure(err error) error {
+	if _, statErr := os.Stat(s.keyringMarkPath()); errors.Is(statErr, os.ErrNotExist) {
+		return keyring.ErrNotFound
+	}
+	return err
+}
+
+func (s fallbackCredentialStore) markKeyringUsed() {
+	path := s.keyringMarkPath()
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	// A mark that cannot be written only leaves a later failing read answering as absence.
+	_ = os.MkdirAll(s.fallback.dir, 0700)
+	_ = os.WriteFile(path, nil, 0600)
+}
+
+func (s fallbackCredentialStore) keyringMarkPath() string {
+	return filepath.Join(s.fallback.dir, "keyring-used")
 }
 
 type encryptedFileStore struct{ dir string }

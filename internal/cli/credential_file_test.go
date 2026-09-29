@@ -109,6 +109,54 @@ func TestCredentialStoreKeepsUsingActivatedFallback(t *testing.T) {
 	}
 }
 
+func TestCredentialStoreReadsAnUnusedFailingKeyringAsEmpty(t *testing.T) {
+	// A server with no Secret Service fails every keyring call. auth status and the login check
+	// read before anything is written.
+	primary := &fakeKeys{values: map[string]string{}, err: errors.New("no session bus")}
+	store := fallbackCredentialStore{primary: primary, fallback: encryptedFileStore{t.TempDir()}}
+	if _, err := store.Get(sessionKey); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("read before login: %v", err)
+	}
+	// A missing mark does not prove the keyring empty, so a delete there is still reported.
+	if err := store.Delete(sessionKey); err == nil || errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("logout before login: %v", err)
+	}
+	if err := store.Set(sessionKey, "session-value"); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := store.Get(sessionKey); err != nil || value != "session-value" {
+		t.Fatalf("%q %v", value, err)
+	}
+	if err := store.Delete(sessionKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(sessionKey); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("read after logout: %v", err)
+	}
+}
+
+func TestCredentialStoreReportsAFailingKeyringOnceItHeldAValue(t *testing.T) {
+	for name, use := range map[string]func(credentialStore) error{
+		"written": func(s credentialStore) error { return s.Set(sessionKey, "session-value") },
+		// A keyring filled by an earlier version is recognised on its first successful read.
+		"read": func(s credentialStore) error { _, err := s.Get(sessionKey); return err },
+	} {
+		primary := &fakeKeys{values: map[string]string{sessionKey: "session-value"}}
+		store := fallbackCredentialStore{primary: primary, fallback: encryptedFileStore{t.TempDir()}}
+		if err := use(store); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		// A locked keychain or a closed password manager hides the value without removing it.
+		primary.err = errors.New("keychain locked")
+		if _, err := store.Get(sessionKey); err == nil || errors.Is(err, keyring.ErrNotFound) {
+			t.Fatalf("%s: read from a locked keyring: %v", name, err)
+		}
+		if err := store.Delete(sessionKey); err == nil || errors.Is(err, keyring.ErrNotFound) {
+			t.Fatalf("%s: delete from a locked keyring: %v", name, err)
+		}
+	}
+}
+
 func TestCredentialStorePrefersOSStore(t *testing.T) {
 	primary := &fakeKeys{values: map[string]string{}}
 	file := encryptedFileStore{t.TempDir()}
