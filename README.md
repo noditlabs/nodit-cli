@@ -89,9 +89,11 @@ The version comes from the binary that was just installed, not from the tag that
 | `NODIT_INSTALL_DIR` | `$HOME/.local/bin`, `%LOCALAPPDATA%\Nodit\bin` on Windows |
 | `NODIT_NO_MODIFY_PATH` | unset; set to `1` to leave startup files alone |
 
+The variables go on `sh`, the side of the pipe that runs the installer:
+
 ```sh
-NODIT_VERSION=v0.1.0 NODIT_INSTALL_DIR=/usr/local/bin \
-  curl -fsSL https://raw.githubusercontent.com/noditlabs/nodit-cli/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/noditlabs/nodit-cli/main/scripts/install.sh |
+  NODIT_VERSION=v0.1.0 NODIT_INSTALL_DIR="$HOME/bin" sh
 ```
 
 To read the script before running it:
