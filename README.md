@@ -112,13 +112,45 @@ copy downloaded through a browser is refused by Gatekeeper.
 
 ### Uninstall
 
+Log out first, while the binary is still there. It removes the saved login and the API Keys linked
+by `project select` from the credential store:
+
 ```sh
 nodit auth logout
+```
+
+If it reports `CREDENTIAL_STORE_UNAVAILABLE` on a machine where you never ran `nodit auth login`,
+nothing was stored there, so go on.
+
+Then delete the settings directory. It holds the config, and the encrypted credential file when the
+OS credential store was not available. `nodit config path` prints a file inside it.
+
+| OS | Directory |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/nodit`, or `~/.config/nodit` when that is unset |
+| macOS | `~/Library/Application Support/nodit` |
+| Windows | `%AppData%\nodit` |
+
+Then the binary, from `NODIT_INSTALL_DIR` if you set one, or `$(go env GOPATH)/bin` after a
+`go install`:
+
+```sh
 rm ~/.local/bin/nodit
 ```
 
-Then remove the line marked `# added by nodit-cli installer` from your shell startup file. On
-Windows, delete `%LOCALAPPDATA%\Nodit\bin\nodit.exe` and drop that directory from the user `PATH`.
+Last, remove the two lines the installer added to your shell startup file: the
+`# added by nodit-cli installer` marker and the PATH line under it. This shows where they are:
+
+```sh
+grep -n 'added by nodit-cli installer' ~/.zshrc ~/.bashrc ~/.bash_profile ~/.config/fish/config.fish 2>/dev/null
+```
+
+If you set up tab completion, also delete the file you wrote, `~/.zfunc/_nodit`,
+`~/.bash_completion.d/nodit` or `~/.config/fish/completions/nodit.fish`, and the `source` or `fpath`
+line you added for it.
+
+On Windows, delete `%LOCALAPPDATA%\Nodit`, which can also hold a `nodit.exe.old` left by an upgrade
+that ran while nodit was open, and drop `%LOCALAPPDATA%\Nodit\bin` from the user `PATH`.
 
 ## Set up authentication
 
