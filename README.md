@@ -47,7 +47,8 @@ go install github.com/noditlabs/nodit-cli/cmd/nodit@latest
 ```
 
 It builds from source rather than fetching a release, so nothing is checksum-verified here beyond
-what the Go module proxy already guarantees, and the binary lands in `$(go env GOPATH)/bin`.
+what the Go module proxy already guarantees, and the binary lands in `$(go env GOBIN)`, or
+`$(go env GOPATH)/bin` when that is empty.
 
 ### Confirm
 
@@ -119,8 +120,8 @@ by `project select` from the credential store:
 nodit auth logout
 ```
 
-If it reports `CREDENTIAL_STORE_UNAVAILABLE` on a machine where you never ran `nodit auth login`,
-nothing was stored there, so go on.
+If it reports `CREDENTIAL_STORE_UNAVAILABLE` on a machine where you never ran `nodit auth login` or
+`nodit project select`, nothing was stored there, so go on.
 
 Then delete the settings directory. It holds the config, and the encrypted credential file when the
 OS credential store was not available. `nodit config path` prints a file inside it.
@@ -131,18 +132,18 @@ OS credential store was not available. `nodit config path` prints a file inside 
 | macOS | `~/Library/Application Support/nodit` |
 | Windows | `%AppData%\nodit` |
 
-Then the binary, from `NODIT_INSTALL_DIR` if you set one, or `$(go env GOPATH)/bin` after a
-`go install`:
+Then the binary, from `NODIT_INSTALL_DIR` if you set one, or from where `go install` put it:
 
 ```sh
 rm ~/.local/bin/nodit
 ```
 
 Last, remove the two lines the installer added to your shell startup file: the
-`# added by nodit-cli installer` marker and the PATH line under it. This shows where they are:
+`# added by nodit-cli installer` marker and the PATH line under it. This shows where they are, and
+works in zsh, bash and fish. If you set `ZDOTDIR`, the zsh file is `$ZDOTDIR/.zshrc` instead.
 
 ```sh
-grep -n 'added by nodit-cli installer' "${ZDOTDIR:-$HOME}/.zshrc" ~/.bashrc ~/.bash_profile ~/.config/fish/config.fish 2>/dev/null
+grep -n 'added by nodit-cli installer' ~/.zshrc ~/.bashrc ~/.bash_profile ~/.config/fish/config.fish 2>/dev/null
 ```
 
 fish also keeps the directory in the universal `fish_user_paths`, so removing the lines is not
@@ -229,11 +230,15 @@ interactive by design, so unattended usage is limited to the product APIs.
 ## Shell completion
 
 ```sh
-nodit completion zsh > "${fpath[1]}/_nodit"          # zsh
-nodit completion bash > /etc/bash_completion.d/nodit # bash
-nodit completion fish > ~/.config/fish/completions/nodit.fish
-nodit completion powershell | Out-String | Invoke-Expression
+mkdir -p ~/.zfunc && nodit completion zsh > ~/.zfunc/_nodit                           # zsh
+mkdir -p ~/.bash_completion.d && nodit completion bash > ~/.bash_completion.d/nodit    # bash
+mkdir -p ~/.config/fish/completions && nodit completion fish > ~/.config/fish/completions/nodit.fish
+nodit completion powershell | Out-String | Invoke-Expression                           # PowerShell
 ```
+
+zsh then needs `fpath=(~/.zfunc $fpath)` and `autoload -Uz compinit && compinit` in `~/.zshrc`, and
+bash needs `source ~/.bash_completion.d/nodit` in `~/.bashrc`, or `~/.bash_profile` on macOS.
+PowerShell loads it for the current session; add the same line to `$PROFILE` to keep it.
 
 Network IDs complete from the catalog in the binary, filtered by what the command can reach, so
 `nodit stream watch --network <tab>` offers only networks carrying Stream. `nodit completion --help`
