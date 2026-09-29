@@ -142,15 +142,25 @@ Last, remove the two lines the installer added to your shell startup file: the
 `# added by nodit-cli installer` marker and the PATH line under it. This shows where they are:
 
 ```sh
-grep -n 'added by nodit-cli installer' ~/.zshrc ~/.bashrc ~/.bash_profile ~/.config/fish/config.fish 2>/dev/null
+grep -n 'added by nodit-cli installer' "${ZDOTDIR:-$HOME}/.zshrc" ~/.bashrc ~/.bash_profile ~/.config/fish/config.fish 2>/dev/null
+```
+
+fish also keeps the directory in the universal `fish_user_paths`, so removing the lines is not
+enough there. Run this once in fish, with your `NODIT_INSTALL_DIR` in place of `~/.local/bin` if
+you set one:
+
+```fish
+set -U fish_user_paths (string match -v -- ~/.local/bin $fish_user_paths)
 ```
 
 If you set up tab completion, also delete the file you wrote, `~/.zfunc/_nodit`,
 `~/.bash_completion.d/nodit` or `~/.config/fish/completions/nodit.fish`, and the `source` or `fpath`
 line you added for it.
 
-On Windows, delete `%LOCALAPPDATA%\Nodit`, which can also hold a `nodit.exe.old` left by an upgrade
-that ran while nodit was open, and drop `%LOCALAPPDATA%\Nodit\bin` from the user `PATH`.
+On Windows, delete `nodit.exe`, and any `nodit.exe.old` left by an upgrade that ran while nodit was
+open, from `%LOCALAPPDATA%\Nodit\bin` or your `NODIT_INSTALL_DIR`, and drop that directory from the
+user `PATH`. With the default location, deleting `%LOCALAPPDATA%\Nodit` removes both files. If you
+set up tab completion, also remove the `nodit completion powershell` line from your `$PROFILE`.
 
 ## Set up authentication
 
