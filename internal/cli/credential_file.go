@@ -73,8 +73,8 @@ func (s fallbackCredentialStore) Delete(key string) error {
 		_ = s.primary.Delete(key)
 		return s.fallback.Delete(key)
 	}
-	// Unlike a read, a failed delete is never taken as done: a logout that reports a removal which
-	// did not happen is worse than one that fails.
+	// While the file is unused, a failed delete is not taken as done even without the mark, unlike a
+	// read: a logout that reports a removal which did not happen is worse than one that fails.
 	return s.primary.Delete(key)
 }
 
