@@ -188,6 +188,16 @@ func (a *app) projectSelectCommand() *cobra.Command {
 		if err := projectID(id); err != nil {
 			return err
 		}
+		// Checked before the project lookup so a malformed ID exits 2 without a request, as apikey get does.
+		// An empty --key-id is malformed too, not a request to pick the key automatically. The server
+		// reports key IDs in lower case, so an upper-case UUID is folded before it is compared.
+		keyGiven := cmd.Flags().Changed("key-id")
+		keyToUse := strings.ToLower(selectedKeyID)
+		if keyGiven {
+			if err := keyID(keyToUse); err != nil {
+				return err
+			}
+		}
 		projects, err := a.managementRequest(cmd, http.MethodGet, "/projects", url.Values{"projectId": {id}}, nil)
 		if err != nil {
 			return err
@@ -199,8 +209,7 @@ func (a *app) projectSelectCommand() *cobra.Command {
 		if stringField(items[0], "status") == "DELETED" {
 			return failure("PROJECT_NOT_ACTIVE", "A deleted project cannot be selected. List running projects with nodit project list.")
 		}
-		keyToUse := selectedKeyID
-		if keyToUse == "" {
+		if !keyGiven {
 			q := url.Values{"projectId": {id}, "status": {"ACTIVE"}, "page": {"1"}, "rpp": {"1000"}}
 			listed, err := a.managementRequest(cmd, http.MethodGet, "/api-keys", q, nil)
 			if err != nil {
@@ -213,9 +222,9 @@ func (a *app) projectSelectCommand() *cobra.Command {
 				return e
 			}
 			keyToUse = stringField(keys[0], "keyId")
-		}
-		if err := keyID(keyToUse); err != nil {
-			return err
+			if keyID(keyToUse) != nil {
+				return failure("INVALID_API_RESPONSE", "API returned a malformed API key ID.")
+			}
 		}
 		detail, err := a.managementRequest(cmd, http.MethodGet, "/api-keys/"+keyToUse, url.Values{}, nil)
 		if err != nil {

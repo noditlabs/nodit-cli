@@ -149,6 +149,57 @@ func TestProjectSelectFailurePreservesSelection(t *testing.T) {
 	}
 }
 
+func TestProjectSelectRejectsAMalformedKeyIDBeforeAnyRequest(t *testing.T) {
+	// An empty value is as malformed as a wrong one: an unset shell variable must not fall back to
+	// linking whichever key the project happens to have.
+	for _, value := range []string{"notauuid", ""} {
+		a := managementTestApp(t)
+		calls := 0
+		mockAPI(a, func(*http.Request) (*http.Response, error) {
+			calls++
+			return response(200, `{"count":1,"items":[{"projectId":"222","status":"RUNNING"}]}`), nil
+		})
+		code, out, e := run(t, a, "project", "select", "222", "--key-id", value, "-o", "json")
+		if code != 2 || out != "" || calls != 0 || !strings.Contains(e, "INVALID_ARGUMENT") {
+			t.Fatalf("%q: %d calls=%d %s %s", value, code, calls, out, e)
+		}
+	}
+}
+
+func TestProjectSelectAcceptsAnUpperCaseKeyID(t *testing.T) {
+	a := managementTestApp(t)
+	mockAPI(a, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/projects":
+			return response(200, `{"count":1,"items":[{"projectId":"123","status":"RUNNING"}]}`), nil
+		case "/v1/api-keys/" + testKeyID:
+			return response(200, `{"keyId":"`+testKeyID+`","projectId":"123","status":"ACTIVE","value":"linked-product-key"}`), nil
+		}
+		t.Fatalf("unexpected request: %s", r.URL)
+		return nil, nil
+	})
+	if code, _, e := run(t, a, "project", "select", "123", "--key-id", strings.ToUpper(testKeyID)); code != 0 {
+		t.Fatal(e)
+	}
+	if c, _ := a.config.read(); c.ProjectKeys["123"] != testKeyID {
+		t.Fatalf("%+v", c)
+	}
+}
+
+// A malformed key ID picked from the server's list is the server's fault, not an argument error.
+func TestProjectSelectReportsAMalformedListedKeyAsAnAPIError(t *testing.T) {
+	a := managementTestApp(t)
+	mockAPI(a, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/v1/projects" {
+			return response(200, `{"count":1,"items":[{"projectId":"123","status":"RUNNING"}]}`), nil
+		}
+		return response(200, `{"count":1,"items":[{"keyId":"not-a-uuid","projectId":"123","status":"ACTIVE"}]}`), nil
+	})
+	if code, _, e := run(t, a, "project", "select", "123", "-o", "json"); code != 1 || !strings.Contains(e, "INVALID_API_RESPONSE") {
+		t.Fatalf("%d %s", code, e)
+	}
+}
+
 func TestManagementMutations(t *testing.T) {
 	for _, tc := range []struct {
 		method, path, query, body string
