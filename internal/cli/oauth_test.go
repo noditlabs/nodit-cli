@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,6 +96,81 @@ func TestOAuthPKCEAndState(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(a.stdout)+fmt.Sprint(a.stderr), "secret-") {
 		t.Fatal("login leaked credentials")
+	}
+}
+
+// The terminal ends a refused login with AUTH_DENIED, so the browser must not ask to go back and finish it.
+func TestOAuthDeniedCallbackSaysSoInTheBrowser(t *testing.T) {
+	a := newTestApp(t)
+	oauthServer(t, a, func(http.ResponseWriter, *http.Request) { t.Error("token exchange after a denial") })
+	var page string
+	a.openBrowser = func(target string) error {
+		u, err := url.Parse(target)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		callback, err := url.Parse(q.Get("redirect_uri"))
+		if err != nil {
+			return err
+		}
+		callback.RawQuery = mapValues("state", q.Get("state"), "error", "access_denied").Encode()
+		resp, err := http.Get(callback.String())
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		page = string(body)
+		return err
+	}
+	err := a.login(context.Background())
+	if e, ok := err.(*commandError); !ok || e.Code != "AUTH_DENIED" {
+		t.Fatalf("login error = %v", err)
+	}
+	if !strings.Contains(page, "denied or cancelled") || strings.Contains(page, "finish login") {
+		t.Fatalf("browser page = %q", page)
+	}
+}
+
+// login may close the server and exit the moment it has the result, so the page has to be complete by then.
+// The channel is unbuffered, so the handler blocks on the hand-over until the test reads it.
+func TestLoginCallbackAnswersTheBrowserBeforeHandingOver(t *testing.T) {
+	for query, want := range map[string]struct{ page, code string }{
+		"state=s&code=c":                        {"Return to the terminal to finish login.", ""},
+		"state=s&error=access_denied":           {"Login was denied or cancelled.", "AUTH_DENIED"},
+		"state=s&error=temporarily_unavailable": {"Login failed.", "LOGIN_FAILED"},
+	} {
+		result := make(chan callbackResult)
+		handler := loginCallback("127.0.0.1:1", "s", result)
+		rec := httptest.NewRecorder()
+		done := make(chan struct{})
+		go func() {
+			handler(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1:1/callback?"+query, nil))
+			close(done)
+		}()
+		cb := <-result
+		if page := rec.Body.String(); !strings.HasPrefix(page, want.page) || rec.Header().Get("Content-Length") != fmt.Sprint(len(page)) {
+			t.Fatalf("%s: page %q not complete at hand-over", query, page)
+		}
+		<-done
+		var e *commandError
+		if want.code == "" && cb.err != nil || want.code != "" && (!errors.As(cb.err, &e) || e.Code != want.code) {
+			t.Fatalf("%s: result error %v", query, cb.err)
+		}
+	}
+}
+
+func TestLoginTimeoutDoesNotPointAtTheTimeoutFlag(t *testing.T) {
+	a := newTestApp(t)
+	oauthServer(t, a, func(http.ResponseWriter, *http.Request) { t.Error("token exchange without a callback") })
+	a.openBrowser = func(string) error { return nil }
+	defer func(wait time.Duration) { loginWait = wait }(loginWait)
+	loginWait = 200 * time.Millisecond
+	err := a.login(context.Background())
+	var e *commandError
+	if !errors.As(err, &e) || e.Code != "TIMEOUT" || strings.Contains(e.Message, "--timeout") || !strings.Contains(e.Message, "nodit auth login") {
+		t.Fatalf("login error = %v", err)
 	}
 }
 

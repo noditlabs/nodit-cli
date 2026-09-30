@@ -7,14 +7,18 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -132,7 +136,7 @@ func (a *app) login(ctx context.Context) error {
 	if _, err := a.credentialPresent(sessionKey); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, loginWait)
 	defer cancel()
 	m, err := a.discover(ctx)
 	if err != nil {
@@ -153,43 +157,9 @@ func (a *app) login(ctx context.Context) error {
 	}
 	defer listener.Close()
 	redirect := "http://" + listener.Addr().String() + "/callback"
-	type callbackResult struct {
-		code string
-		err  error
-	}
 	result := make(chan callbackResult, 1)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if r.Host != listener.Addr().String() {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		q, err := url.ParseQuery(r.URL.RawQuery)
-		if err != nil || len(q["state"]) != 1 || subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(state)) != 1 {
-			http.Error(w, "Invalid login state.", http.StatusBadRequest)
-			return
-		}
-		var cb callbackResult
-		if q.Get("error") != "" {
-			cb.err = failure("AUTH_DENIED", "Login was denied or cancelled.")
-		} else if len(q["code"]) != 1 || q.Get("code") == "" {
-			http.Error(w, "Missing authorization code.", http.StatusBadRequest)
-			return
-		} else {
-			cb.code = q.Get("code")
-		}
-		select {
-		case result <- cb:
-			fmt.Fprintln(w, "Return to the terminal to finish login.")
-		default:
-			http.Error(w, "Login callback already received.", http.StatusConflict)
-		}
-	})
+	mux.HandleFunc("/callback", loginCallback(listener.Addr().String(), state, result))
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	defer server.Close()
 	go func() { _ = server.Serve(listener) }()
@@ -205,6 +175,10 @@ func (a *app) login(ctx context.Context) error {
 	}
 	select {
 	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// --timeout only bounds each HTTP request, so pointing at it here would not help.
+			return failure("TIMEOUT", "Login was not finished within 2 minutes. Run nodit auth login again.")
+		}
 		return ctx.Err()
 	case cb := <-result:
 		if cb.err != nil {
@@ -220,6 +194,75 @@ func (a *app) login(ctx context.Context) error {
 		return a.success(map[string]any{"loggedIn": true, "expiresAt": s.ExpiresAt})
 	}
 }
+
+// loginWait bounds the whole browser login. It is a variable so tests need not wait two minutes.
+var loginWait = 2 * time.Minute
+
+type callbackResult struct {
+	code string
+	err  error
+}
+
+// loginCallback answers the browser in full before it hands the result over, since login may close the
+// server and exit as soon as it has the result. Only the first valid callback is taken.
+func loginCallback(addr, state string, result chan<- callbackResult) http.HandlerFunc {
+	var taken atomic.Bool
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Host != addr {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		q, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil || len(q["state"]) != 1 || subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(state)) != 1 {
+			http.Error(w, "Invalid login state.", http.StatusBadRequest)
+			return
+		}
+		var cb callbackResult
+		page := "Return to the terminal to finish login."
+		switch oauthError := q.Get("error"); {
+		case oauthError == "access_denied":
+			cb.err = failure("AUTH_DENIED", "Login was denied or cancelled.")
+			page = "Login was denied or cancelled. You can close this window."
+		case oauthError != "":
+			cb.err = loginFailed(oauthError)
+			page = "Login failed. The terminal shows the reason."
+		case len(q["code"]) != 1 || q.Get("code") == "":
+			http.Error(w, "Missing authorization code.", http.StatusBadRequest)
+			return
+		default:
+			cb.code = q.Get("code")
+		}
+		if !taken.CompareAndSwap(false, true) {
+			http.Error(w, "Login callback already received.", http.StatusConflict)
+			return
+		}
+		page += "\n"
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Length", strconv.Itoa(len(page)))
+		_, _ = io.WriteString(w, page)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		result <- cb
+	}
+}
+
+// loginFailed reports an OAuth error other than a refusal. The code comes from the redirect, so only a
+// well-formed one is repeated.
+func loginFailed(code string) error {
+	e := failure("LOGIN_FAILED", "The authorization server ended the login with an error. Run nodit auth login again.")
+	if oauthErrorCode.MatchString(code) {
+		e.Details = map[string]any{"oauthError": code}
+	}
+	return e
+}
+
+var oauthErrorCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
 
 func openBrowser(target string) error {
 	var cmd *exec.Cmd
