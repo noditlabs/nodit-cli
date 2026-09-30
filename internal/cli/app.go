@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	keyring "github.com/zalando/go-keyring"
+	"golang.org/x/term"
 )
 
 type app struct {
@@ -30,6 +31,7 @@ type app struct {
 	streamDial      streamDialFunc
 	openBrowser     func(string) error
 	stdinRedirected bool
+	stdinTerminal   bool
 	format          string
 	noInteractive   bool
 	timeoutMS       int
@@ -63,6 +65,7 @@ func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		streamDial:      defaultStreamDial,
 		openBrowser:     openBrowser,
 		stdinRedirected: redirectedInput(stdin),
+		stdinTerminal:   terminalInput(stdin),
 	}
 	return a.execute(ctx, args)
 }
@@ -74,6 +77,12 @@ func redirectedInput(r io.Reader) bool {
 	}
 	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice == 0
+}
+
+// terminalInput is narrower than a character device: /dev/null is one too, and nobody answers from it.
+func terminalInput(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 func (a *app) execute(ctx context.Context, args []string) int {

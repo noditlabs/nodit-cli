@@ -85,8 +85,25 @@ func TestWebhookValidationBeforeRequest(t *testing.T) {
 	}
 }
 
+// Without a terminal nobody can answer, so the command stops before reading stdin or printing the prompt,
+// and names --yes. With --yes the run leaves stderr empty.
+func TestConfirmationWithoutATerminalAsksForYes(t *testing.T) {
+	a := productTestApp(t)
+	calls := 0
+	mockAPI(a, func(r *http.Request) (*http.Response, error) { calls++; return response(200, `{"deleted":true}`), nil })
+	a.stdin = strings.NewReader("yes\n")
+	code, out, stderr := run(t, a, "webhook", "classic", "delete", "1", "-n", "ethereum-mainnet", "-o", "json")
+	if code != 1 || out != "" || calls != 0 || strings.Contains(stderr, "Type yes") || !strings.HasPrefix(stderr, "{") || !strings.Contains(stderr, "--yes") {
+		t.Fatalf("%d calls=%d %s %q", code, calls, out, stderr)
+	}
+	if code, _, stderr := run(t, a, "webhook", "classic", "delete", "1", "-n", "ethereum-mainnet", "--yes"); code != 0 || stderr != "" || calls != 1 {
+		t.Fatalf("%d calls=%d %q", code, calls, stderr)
+	}
+}
+
 func TestWebhookConfirmation(t *testing.T) {
 	a := productTestApp(t)
+	a.stdinTerminal = true
 	a.stdin = strings.NewReader("no\n")
 	if code, out, stderr := run(t, a, "webhook", "classic", "delete", "1", "-n", "ethereum-mainnet"); code != 1 || out != "" || !strings.Contains(stderr, "CANCELLED") {
 		t.Fatalf("%d %s %s", code, out, stderr)
