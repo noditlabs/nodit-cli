@@ -224,6 +224,10 @@ func TestUsageHelpCarriesTheAccountingCaveats(t *testing.T) {
 			"40 days",
 			"last confirmed five-minute boundary",
 			"at least 10m",
+			"reached the account's current nodes",
+			"usedCu is above zero but no request was counted",
+			"With --request-type WEB3_DATA_API",
+			"each timeseries bucket and each breakdown group",
 		} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("%v missing %q", args, want)

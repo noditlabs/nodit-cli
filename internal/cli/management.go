@@ -518,20 +518,31 @@ const usageLong = "Usage figures are for reference. The billing statement is the
 	"check dedicated node usage in the console.\n" +
 	"Compute Unit history reaches as far back as the account plan allows, while request counts\n" +
 	"reach back 40 days at most regardless of plan.\n" +
+	"requests counts only the requests that reached the account's current nodes. Web3 Data API\n" +
+	"calls with no chain in the path (/v1/multichain, /v1/cryptocurrency), webhooks, streams and\n" +
+	"nodes the account no longer has are billed in usedCu but not counted in requests, so dividing\n" +
+	"one by the other does not give CU per request. In breakdown each group counts its own nodes.\n" +
+	"A --request-type filter counts only the calls classified as that type, so calls to methods\n" +
+	"not yet classified appear in the unfiltered count alone. With --request-type WEB3_DATA_API,\n" +
+	"requests counts the calls that name a chain in the path.\n" +
 	"Answers stop at the last confirmed five-minute boundary, whatever --to asks for and even\n" +
 	"when it is left unset, so both usedCu and requests cover the same window and the last few\n" +
 	"minutes are missing from both. A range lying entirely past that boundary is rejected, and\n" +
 	"--period must cover at least 10m.\n" +
 	"requests is null when the range reaches past the 40 day count history, when --request-type\n" +
-	"names WEBHOOK, STREAM or WEB3_DATA_API, which carry no request counts, and while counting\n" +
-	"is unreadable or has not reached the current billing cycle. That last case leaves the\n" +
-	"window uncut, so usedCu still answers the cycle it was asked for.\n" +
+	"names WEBHOOK or STREAM, even alongside other types, since they carry no request counts, when\n" +
+	"usedCu is above zero but no request was counted, and while counting is unreadable or has not\n" +
+	"reached the current billing cycle. When it has not reached the cycle the window is left uncut,\n" +
+	"so usedCu still answers the cycle it was asked for. The null rule for usedCu with nothing\n" +
+	"counted applies to the whole answer, each timeseries bucket and each breakdown group, so a\n" +
+	"requests total of 0 appears only when usedCu is 0 as well.\n" +
 	"coveredThrough is the end of the window the answer covers, so comparing it with the --to that\n" +
 	"was sent shows whether the range was cut. Plan limits are the account as it stands and are\n" +
 	"unaffected by the range."
 
 const usageTimeseriesLong = "Buckets are cut on UTC boundaries, and the bucket that straddles the confirmed\n" +
-	"boundary reports requests as null while usedCu keeps growing on re-query.\n" +
+	"boundary reports requests as null while usedCu keeps growing on re-query. A bucket that\n" +
+	"billed CU with no request counted is null as well.\n" +
 	"A 5m range cannot exceed one day, so pass --period or --from with that granularity."
 
 func (a *app) usageCommand() *cobra.Command {
