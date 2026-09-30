@@ -336,6 +336,42 @@ func TestRejectedCredentialNamesTheWayOut(t *testing.T) {
 	}
 }
 
+func TestAuthHintFollowsAServerMessageWithoutAFullStop(t *testing.T) {
+	a := managementTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) {
+		return response(401, `{"code":"AUTHENTICATION_FAILED","message":"The provided access token is not valid"}`), nil
+	})
+	_, _, e := run(t, a, "project", "list", "-o", "json")
+	if !strings.Contains(e, "is not valid. See which credential") || !strings.Contains(e, "nodit auth login") {
+		t.Fatal(e)
+	}
+	// The Management API only takes the login, so an API key would not help here.
+	if strings.Contains(e, "NODIT_API_KEY") {
+		t.Fatal(e)
+	}
+	mockAPI(a, func(*http.Request) (*http.Response, error) {
+		return response(401, `{"code":"AUTHENTICATION_FAILED","message":"   "}`), nil
+	})
+	if _, _, e := run(t, a, "project", "list", "-o", "json"); !strings.Contains(e, "API rejected the request. See which credential") {
+		t.Fatal(e)
+	}
+}
+
+func TestAsSentence(t *testing.T) {
+	for in, want := range map[string]string{
+		"Authentication failed.":      "Authentication failed.",
+		"Invalid token":               "Invalid token.",
+		"Invalid token\r\n":           "Invalid token.",
+		"Unauthorized:":               "Unauthorized:",
+		"Authentication failed\u3002": "Authentication failed\u3002",
+		"Try again\u2026":             "Try again\u2026",
+	} {
+		if got := asSentence(in); got != want {
+			t.Errorf("asSentence(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestAPIErrorMappingAndNoCredentialLeak(t *testing.T) {
 	for _, tc := range []struct {
 		status     int

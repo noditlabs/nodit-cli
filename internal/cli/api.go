@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/noditlabs/nodit-cli/internal/buildinfo"
 )
@@ -115,7 +117,7 @@ func (a *app) jsonRequest(ctx context.Context, method, endpoint, authHeader, cre
 	}
 	value = redactAPIValue(value, strings.TrimPrefix(credential, "Bearer "))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, apiFailure(resp.StatusCode, value, resp.Header)
+		return nil, nil, apiFailure(resp.StatusCode, value, resp.Header, authHeader == "Authorization")
 	}
 	if len(bytes.TrimSpace(content)) == 0 {
 		decodeErr = nil
@@ -170,7 +172,9 @@ func retryDetails(headers http.Header) any {
 	return details
 }
 
-func apiFailure(status int, value any, headers http.Header) error {
+// session reports that the request carried the OAuth login rather than an API key, which changes what a
+// rejected credential can be replaced with.
+func apiFailure(status int, value any, headers http.Header, session bool) error {
 	e := failure("API_ERROR", "API rejected the request.")
 	e.HTTPStatus = status
 	// The server answers a rejected credential with its own wording, which says nothing about which
@@ -182,6 +186,10 @@ func apiFailure(status int, value any, headers http.Header) error {
 		e.Code = "AUTHENTICATION_FAILED"
 		hint = "See which credential this used with nodit auth status. Set a working one with " +
 			"NODIT_API_KEY, or run nodit auth login and nodit project select <project-id> to link one."
+		if session {
+			hint = "See which credential this used with nodit auth status. Replace NODIT_AUTH_TOKEN if it is set, " +
+				"or run nodit auth login to sign in again."
+		}
 	case 403:
 		e.Code = "PERMISSION_DENIED"
 		hint = "See which credential this used with nodit auth status."
@@ -201,7 +209,7 @@ func apiFailure(status int, value any, headers http.Header) error {
 		case json.Number:
 			e.APICode = code
 		}
-		if message, ok := problem["message"].(string); ok && message != "" {
+		if message, ok := problem["message"].(string); ok && strings.TrimSpace(message) != "" {
 			e.Message = message
 		}
 		// Already filled from the rate limit headers on 429, which is the more specific source there.
@@ -216,9 +224,19 @@ func apiFailure(status int, value any, headers http.Header) error {
 		}
 	}
 	if hint != "" {
-		e.Message = strings.TrimSuffix(e.Message, " ") + " " + hint
+		e.Message = asSentence(e.Message) + " " + hint
 	}
 	return e
+}
+
+// asSentence adds a full stop to a server message that has none, so an appended hint starts a new sentence.
+func asSentence(message string) string {
+	message = strings.TrimRightFunc(message, unicode.IsSpace)
+	last, _ := utf8.DecodeLastRuneInString(message)
+	if message == "" || strings.ContainsRune(".!?:\u3002\uff01\uff1f\u2026", last) {
+		return message
+	}
+	return message + "."
 }
 
 func redactAPIValue(v any, key string) any {

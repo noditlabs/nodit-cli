@@ -243,7 +243,7 @@ func (a *app) downloadCSV(ctx context.Context, endpoint, key, target string) err
 		d := json.NewDecoder(bytes.NewReader(content))
 		d.UseNumber()
 		_ = d.Decode(&value)
-		return apiFailure(resp.StatusCode, redactAPIValue(value, key), resp.Header)
+		return apiFailure(resp.StatusCode, redactAPIValue(value, key), resp.Header, false)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(strings.ToLower(ct), "text/csv") {
 		return failure("INVALID_API_RESPONSE", "Address export did not return CSV.")
