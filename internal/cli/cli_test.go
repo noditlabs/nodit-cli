@@ -110,20 +110,6 @@ func TestConfigListNamesEveryKeyWhenUnset(t *testing.T) {
 	}
 }
 
-func TestRedirectedInputDetection(t *testing.T) {
-	file, err := os.CreateTemp(t.TempDir(), "stdin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	if !redirectedInput(file) {
-		t.Fatal("redirected file was not detected")
-	}
-	if redirectedInput(strings.NewReader("[]")) {
-		t.Fatal("generic reader was treated as process stdin")
-	}
-}
-
 func TestConfigPersistenceAndValidation(t *testing.T) {
 	a := newTestApp(t)
 	if c, _, e := run(t, a, "config", "set", "network", "solana-devnet"); c != 0 {

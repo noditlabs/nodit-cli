@@ -20,21 +20,20 @@ import (
 )
 
 type app struct {
-	env             buildinfo.Environment
-	config          configStore
-	keys            credentialStore
-	stdin           io.Reader
-	stdout, stderr  io.Writer
-	getenv          func(string) string
-	now             func() time.Time
-	httpClient      *http.Client
-	streamDial      streamDialFunc
-	openBrowser     func(string) error
-	stdinRedirected bool
-	stdinTerminal   bool
-	format          string
-	noInteractive   bool
-	timeoutMS       int
+	env            buildinfo.Environment
+	config         configStore
+	keys           credentialStore
+	stdin          io.Reader
+	stdout, stderr io.Writer
+	getenv         func(string) string
+	now            func() time.Time
+	httpClient     *http.Client
+	streamDial     streamDialFunc
+	openBrowser    func(string) error
+	stdinTerminal  bool
+	format         string
+	noInteractive  bool
+	timeoutMS      int
 }
 
 func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -56,27 +55,17 @@ func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 			primary:  systemKeyring{"nodit-cli-" + env.Namespace},
 			fallback: encryptedFileStore{configDir},
 		},
-		stdin:           stdin,
-		stdout:          stdout,
-		stderr:          stderr,
-		getenv:          os.Getenv,
-		now:             time.Now,
-		httpClient:      &http.Client{},
-		streamDial:      defaultStreamDial,
-		openBrowser:     openBrowser,
-		stdinRedirected: redirectedInput(stdin),
-		stdinTerminal:   terminalInput(stdin),
+		stdin:         stdin,
+		stdout:        stdout,
+		stderr:        stderr,
+		getenv:        os.Getenv,
+		now:           time.Now,
+		httpClient:    &http.Client{},
+		streamDial:    defaultStreamDial,
+		openBrowser:   openBrowser,
+		stdinTerminal: terminalInput(stdin),
 	}
 	return a.execute(ctx, args)
-}
-
-func redirectedInput(r io.Reader) bool {
-	f, ok := r.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice == 0
 }
 
 // terminalInput is narrower than a character device: /dev/null is one too, and nobody answers from it.

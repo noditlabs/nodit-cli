@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func productTestApp(t *testing.T) *app {
@@ -234,20 +239,19 @@ func TestRESTContractAndHeaders(t *testing.T) {
 		t.Fatalf("%d %s %s", c, out, e)
 	}
 	a.stdin = strings.NewReader(`{"arguments":[9007199254740993,"42"]}`)
-	a.stdinRedirected = true
-	c, out, e = run(t, a, "rest", "POST", "/view", "-n", "aptos-mainnet", "-o", "json")
+	c, out, e = run(t, a, "rest", "POST", "/view", "-n", "aptos-mainnet", "--body-file", "-", "-o", "json")
 	if c != 0 || !strings.Contains(out, `"body": null`) {
 		t.Fatalf("%d %s %s", c, out, e)
 	}
-	// A GET carries no body, so inherited stdin, such as a pipe in a script, is not read as one.
+	// Stdin is read only through --body-file -, so a stdin handed down by a script is not taken as a body.
 	mockAPI(a, func(r *http.Request) (*http.Response, error) {
-		if r.Method != "GET" || r.Header.Get("Content-Type") != "" {
-			t.Fatalf("stdin reached a GET: %s", r.Method)
+		if r.Method != "POST" || r.Header.Get("Content-Type") != "" {
+			t.Fatalf("stdin reached the request: %s %s", r.Method, r.Header.Get("Content-Type"))
 		}
 		return response(200, `{}`), nil
 	})
 	a.stdin = strings.NewReader("not json at all")
-	c, out, e = run(t, a, "rest", "GET", "/accounts/0x1", "-n", "aptos-mainnet", "-o", "json")
+	c, out, e = run(t, a, "rest", "POST", "/wallet/getnowblock", "-n", "tron-mainnet", "-o", "json")
 	if c != 0 || !strings.Contains(out, `"body"`) {
 		t.Fatalf("%d %s %s", c, out, e)
 	}
@@ -276,6 +280,75 @@ func TestRESTRejectsAmbiguityAndUnsafePaths(t *testing.T) {
 	} {
 		if c, out, e := run(t, a, args...); c != 2 || out != "" {
 			t.Fatalf("%v: %d %s %s", args, c, out, e)
+		}
+	}
+}
+
+type unreadableInput struct{ t *testing.T }
+
+func (r unreadableInput) Read([]byte) (int, error) {
+	r.t.Error("stdin was read")
+	return 0, io.EOF
+}
+
+func TestRejectedRPCMethodDoesNotReadStdin(t *testing.T) {
+	a := productTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) { t.Fatal("rejected RPC reached API"); return nil, nil })
+	a.stdin = unreadableInput{t}
+	for _, args := range [][]string{
+		{"rpc", "eth_blockNumber", "-n", "aptos-mainnet", "--params-file", "-"},
+		{"rpc", "foo_bar", "-n", "sei-mainnet", "--params-file", "-"},
+	} {
+		if c, _, e := run(t, a, args...); c != 2 || !strings.Contains(e, "UNSUPPORTED_OPERATION") {
+			t.Fatalf("%v: %d %s", args, c, e)
+		}
+	}
+}
+
+func TestStdinWaitEndsOnTimeoutOrCancel(t *testing.T) {
+	a := productTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) { t.Fatal("request sent without input"); return nil, nil })
+	stdin, writer := io.Pipe()
+	defer writer.Close()
+	a.stdin = stdin
+	for _, args := range [][]string{
+		{"rpc", "eth_getBalance", "--params-file", "-", "-n", "ethereum-mainnet", "--timeout", "50"},
+		{"rest", "POST", "/wallet/getnowblock", "--body-file", "-", "-n", "tron-mainnet", "--timeout", "50"},
+	} {
+		if c, _, e := run(t, a, args...); c != 1 || !strings.Contains(e, "TIMEOUT") || !strings.Contains(e, "JSON input") {
+			t.Fatalf("%v: %d %s", args, c, e)
+		}
+	}
+	// SIGINT only cancels the context, so the wait has to watch it or Ctrl-C would sit out the timeout.
+	// The timeout stays short so a wait that ignores the context fails as TIMEOUT instead of stalling.
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	a.stdout, a.stderr = &bytes.Buffer{}, &bytes.Buffer{}
+	if c := a.execute(ctx, []string{"rpc", "eth_getBalance", "--params-file", "-", "-n", "ethereum-mainnet", "--timeout", "2000"}); c != 130 || !strings.Contains(a.stderr.(*bytes.Buffer).String(), "CANCELLED") {
+		t.Fatalf("%d %s", c, a.stderr)
+	}
+}
+
+func TestInputPathWaitEndsOnTimeout(t *testing.T) {
+	a := productTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) { t.Fatal("request sent without input"); return nil, nil })
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	// A pipe behind a path, such as /dev/stdin or <(cmd), can leave the read waiting just as "-" can.
+	path := "/dev/fd/" + strconv.Itoa(int(r.Fd()))
+	if _, err := os.Stat(path); err != nil {
+		t.Skip("no /dev/fd entry for the pipe")
+	}
+	for _, args := range [][]string{
+		{"rpc", "eth_getBalance", "--params-file", path, "-n", "ethereum-mainnet", "--timeout", "50"},
+		{"rest", "POST", "/wallet/getnowblock", "--body-file", path, "-n", "tron-mainnet", "--timeout", "50"},
+	} {
+		if c, _, e := run(t, a, args...); c != 1 || !strings.Contains(e, "TIMEOUT") || !strings.Contains(e, "JSON input") {
+			t.Fatalf("%v: %d %s", args, c, e)
 		}
 	}
 }

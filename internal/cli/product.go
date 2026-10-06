@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -94,13 +96,44 @@ func readJSONBody(value string) (json.RawMessage, error) {
 	return json.RawMessage(content), nil
 }
 
-func readJSONFile(path string) (json.RawMessage, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, invalid("Cannot open the JSON input file.")
+// A read has no deadline of its own, and a pipe can stand behind any path, "-" or /dev/stdin or a
+// FIFO that blocks on open, so --timeout bounds the whole wait the way it bounds a request.
+func (a *app) readJSONFile(ctx context.Context, path string) (json.RawMessage, error) {
+	type result struct {
+		raw json.RawMessage
+		err error
 	}
-	defer f.Close()
-	raw, err := readJSONReader(f)
+	done := make(chan result, 1)
+	stdin := a.stdin
+	go func() {
+		raw, err := readJSONSource(stdin, path)
+		done <- result{raw, err}
+	}()
+	timer := time.NewTimer(time.Duration(a.timeoutMS) * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		return r.raw, r.err
+	case <-timer.C:
+		return nil, failure("TIMEOUT", "Timed out waiting for JSON input. Raise the limit with --timeout.")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// "-" names stdin, the way kubectl -f - does. Stdin is read only when named this way, because a
+// script or an agent can hand down a stdin that never closes, and reading it unasked would hang.
+func readJSONSource(stdin io.Reader, path string) (json.RawMessage, error) {
+	r := stdin
+	if path != "-" {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, invalid("Cannot open the JSON input file.")
+		}
+		defer f.Close()
+		r = f
+	}
+	raw, err := readJSONReader(r)
 	if err != nil {
 		return nil, err
 	}

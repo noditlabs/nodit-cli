@@ -12,7 +12,7 @@ func (a *app) rpcCommand() *cobra.Command {
 	var params, paramsFile string
 	cmd := &cobra.Command{
 		Use: "rpc <method> [params...]", Short: "Call Node JSON-RPC using an API key", Args: helpOnNoArgs(cobra.MinimumNArgs(1)),
-		Long:    "Call JSON-RPC on catalog EVM, Solana, Sui, Cosmos, Bitcoin, Tron, and XRPL networks.\nXRPL answers outside JSON-RPC 2.0 and its errors arrive with HTTP 200.\nAptos uses nodit rest. Sei and Injective route known CometBFT methods to rpc- hosts,\nand eth_, net_, web3_, debug_, and trace_ methods to evm- hosts.\nPass simple params after the method. Valid JSON values keep their types; other values become strings.\nUse --params or --params-file for a complete JSON array. Piped input is used when no params are given.\nThe original JSON-RPC response is preserved. No unit conversion or automatic retry is performed.\nMethods can change blockchain state.",
+		Long:    "Call JSON-RPC on catalog EVM, Solana, Sui, Cosmos, Bitcoin, Tron, and XRPL networks.\nXRPL answers outside JSON-RPC 2.0 and its errors arrive with HTTP 200.\nAptos uses nodit rest. Sei and Injective route known CometBFT methods to rpc- hosts,\nand eth_, net_, web3_, debug_, and trace_ methods to evm- hosts.\nPass simple params after the method. Valid JSON values keep their types; other values become strings.\nUse --params or --params-file for a complete JSON array. --params-file - reads it from stdin.\nReading --params-file is bounded by --timeout, the same as the request.\nThe original JSON-RPC response is preserved. No unit conversion or automatic retry is performed.\nMethods can change blockchain state.",
 		Example: "  nodit rpc eth_getBalance 0x000000000000000000000000000000000000dEaD latest -n ethereum-mainnet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key, err := a.apiKey(flags.apiKey)
@@ -27,11 +27,12 @@ func (a *app) rpcCommand() *cobra.Command {
 			if method == "" || strings.IndexFunc(method, func(r rune) bool { return r <= ' ' || r >= 127 }) >= 0 {
 				return invalid("RPC method must be a non-empty name without whitespace.")
 			}
-			rawParams, err := a.rpcParams(cmd, args[1:], params, paramsFile)
+			// A method this network rejects fails before params are read, so it never waits on stdin.
+			endpoint, err := a.rpcEndpoint(n, method)
 			if err != nil {
 				return err
 			}
-			endpoint, err := a.rpcEndpoint(n, method)
+			rawParams, err := a.rpcParams(cmd, args[1:], params, paramsFile)
 			if err != nil {
 				return err
 			}
@@ -74,7 +75,7 @@ func (a *app) rpcCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&params, "params", "", "Complete JSON array of RPC parameters")
-	cmd.Flags().StringVar(&paramsFile, "params-file", "", "Path to a JSON array of RPC parameters")
+	cmd.Flags().StringVar(&paramsFile, "params-file", "", "Path to a JSON array of RPC parameters, or - for stdin")
 	flags.bind(cmd)
 	return cmd
 }
@@ -101,23 +102,14 @@ func (a *app) rpcParams(cmd *cobra.Command, values []string, inline, path string
 	case cmd.Flags().Changed("params"):
 		raw = json.RawMessage(strings.TrimSpace(inline))
 	case cmd.Flags().Changed("params-file"):
-		raw, err = readJSONFile(path)
-	case a.stdinRedirected:
-		raw, err = readJSONReader(a.stdin)
+		raw, err = a.readJSONFile(cmd.Context(), path)
 	default:
 		raw = json.RawMessage("[]")
 	}
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) == 0 {
-		if sources > 0 {
-			return nil, invalid("RPC params must be a valid JSON array.")
-		}
-		raw = json.RawMessage("[]")
-	} else {
-		raw = json.RawMessage(strings.TrimSpace(string(raw)))
-	}
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
 	if !json.Valid(raw) || raw[0] != '[' {
 		return nil, invalid("RPC params must be a valid JSON array.")
 	}

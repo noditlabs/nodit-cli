@@ -286,8 +286,14 @@ func TestRPCParameterInputs(t *testing.T) {
 	}
 
 	a.stdin = strings.NewReader(want)
-	a.stdinRedirected = true
-	if c, _, e := run(t, a, "rpc", "eth_getBalance", "-n", "ethereum-mainnet"); c != 0 {
+	if c, _, e := run(t, a, "rpc", "eth_getBalance", "--params-file", "-", "-n", "ethereum-mainnet"); c != 0 {
+		t.Fatal(e)
+	}
+
+	// Stdin is read only through --params-file -, so a stdin handed down by a script is not taken as params.
+	want = "[]"
+	a.stdin = strings.NewReader("not json at all")
+	if c, _, e := run(t, a, "rpc", "eth_blockNumber", "-n", "ethereum-mainnet"); c != 0 {
 		t.Fatal(e)
 	}
 
@@ -295,8 +301,9 @@ func TestRPCParameterInputs(t *testing.T) {
 		{"rpc", "eth_getBalance", "{bad", "-n", "ethereum-mainnet"},
 		{"rpc", "eth_getBalance", "latest", "--params", "[]", "-n", "ethereum-mainnet"},
 		{"rpc", "eth_getBalance", "--params", "[]", "--params-file", file, "-n", "ethereum-mainnet"},
+		{"rpc", "eth_getBalance", "--params-file", "-", "-n", "ethereum-mainnet"},
 	} {
-		a.stdinRedirected = false
+		a.stdin = strings.NewReader("")
 		if c, out, _ := run(t, a, args...); c != 2 || out != "" {
 			t.Fatalf("%v: %d %s", args, c, out)
 		}
