@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,6 +66,26 @@ func parseRESTPath(path string) (*url.URL, error) {
 	return u, nil
 }
 
+// Tron's HTTP API answers a call it could not run with 200 and an Error field, so without this a
+// rejected request would exit 0.
+func tronFailure(result any) error {
+	problem, ok := result.(map[string]any)
+	if !ok {
+		return nil
+	}
+	text, ok := problem["Error"].(string)
+	if !ok {
+		return nil
+	}
+	e := failure("API_ERROR", "API rejected the request.")
+	if strings.TrimSpace(text) != "" {
+		e.Message = text
+	}
+	e.HTTPStatus = http.StatusOK
+	e.Details = problem
+	return e
+}
+
 func routeRESTPath(n network, u *url.URL) (string, error) {
 	host := n.ID
 	switch {
@@ -98,7 +119,7 @@ func (a *app) restCommand() *cobra.Command {
 	var body, bodyFile string
 	cmd := &cobra.Command{
 		Use: "rest <method> <path>", Short: "Call Aptos, Cosmos SDK, CometBFT, or Tron Node REST", Args: helpOnNoArgs(cobra.ExactArgs(2)),
-		Long:    "Call a Node REST endpoint using an API key. Supports catalog Aptos, Cosmos, and Tron networks.\nAptos paths are relative to /v1; Cosmos SDK paths start with /cosmos/ (Initia also /initia/);\nCometBFT paths include /status, /block, /tx and other documented methods;\nTron paths start with /wallet/ or /walletsolidity/.\nUse repeated --query key=value options, --body for inline JSON, or --body-file for a JSON file.\n--body-file - reads the body from stdin. Reading --body-file is bounded by --timeout.\nGET bodies are rejected.\nSuccess includes the original JSON body and safe ledger, cursor, and rate limit headers.\nBinary BCS is unsupported. Requests never follow redirects or retry automatically.\nSome GET routes, including CometBFT broadcasts, can change blockchain state.",
+		Long:    "Call a Node REST endpoint using an API key. Supports catalog Aptos, Cosmos, and Tron networks.\nAptos paths are relative to /v1; Cosmos SDK paths start with /cosmos/ (Initia also /initia/);\nCometBFT paths include /status, /block, /tx and other documented methods;\nTron paths start with /wallet/ or /walletsolidity/.\nUse repeated --query key=value options, --body for inline JSON, or --body-file for a JSON file.\n--body-file - reads the body from stdin. Reading --body-file is bounded by --timeout.\nGET bodies are rejected.\nSuccess includes the original JSON body and safe ledger, cursor, and rate limit headers.\nTron answers some errors with HTTP 200 and an Error field; those fail as API_ERROR.\nBinary BCS is unsupported. Requests never follow redirects or retry automatically.\nSome GET routes, including CometBFT broadcasts, can change blockchain state.",
 		Example: "  nodit rest GET /accounts/0x1/resources -n aptos-mainnet --query limit=1\n  nodit rest GET /block -n cosmos-mainnet\n  nodit rest POST /view -n aptos-mainnet --body-file request.json\n  nodit rest POST /wallet/getnowblock -n tron-mainnet --body '{}'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key, err := a.apiKey(flags.apiKey)
@@ -149,7 +170,18 @@ func (a *app) restCommand() *cobra.Command {
 			}
 			result, headers, err := a.apiRequest(cmd.Context(), method, endpoint.String(), key, requestBody)
 			if err != nil {
+				// A request without a body carries no Content-Type, so a route that needs a JSON body
+				// answers 415 and names the header instead of the body it is missing.
+				var ce *commandError
+				if requestBody == nil && method != http.MethodGet && errors.As(err, &ce) && ce.Code == "API_ERROR" && ce.HTTPStatus == http.StatusUnsupportedMediaType {
+					ce.Message = asSentence(ce.Message) + " This request was sent without a body. Pass --body or --body-file."
+				}
 				return err
+			}
+			if n.Chain == "tron" {
+				if err := tronFailure(result); err != nil {
+					return err
+				}
 			}
 			return a.success(map[string]any{"body": result, "headers": headers})
 		},

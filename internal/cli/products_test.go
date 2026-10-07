@@ -257,6 +257,52 @@ func TestRESTContractAndHeaders(t *testing.T) {
 	}
 }
 
+func TestRESTNamesTheMissingBodyOn415(t *testing.T) {
+	a := productTestApp(t)
+	mockAPI(a, func(*http.Request) (*http.Response, error) {
+		return response(415, `{"message":"the client request does not include the Content-Type header","error_code":"web_framework_error"}`), nil
+	})
+	hint := "This request was sent without a body. Pass --body or --body-file."
+	c, _, e := run(t, a, "rest", "POST", "/view", "-n", "aptos-mainnet", "-o", "json")
+	if c != 1 || !strings.Contains(e, `"API_ERROR"`) || !strings.Contains(e, `"httpStatus": 415`) || !strings.Contains(e, "Content-Type header. "+hint) {
+		t.Fatalf("%d %s", c, e)
+	}
+	// With a body sent, or on a GET that cannot carry one, the server's reason is about something else.
+	for _, args := range [][]string{
+		{"rest", "POST", "/view", "-n", "aptos-mainnet", "--body", "{}"},
+		{"rest", "GET", "/accounts/0x1", "-n", "aptos-mainnet"},
+	} {
+		if c, _, e := run(t, a, args...); c != 1 || !strings.Contains(e, "415") || strings.Contains(e, hint) {
+			t.Fatalf("%v: %d %s", args, c, e)
+		}
+	}
+}
+
+func TestRESTTronErrorIn200Fails(t *testing.T) {
+	a := productTestApp(t)
+	reply := `{"Error":"class org.tron.core.services.http.JsonFormat$ParseException : 1:1: Expected \"{\"."}`
+	mockAPI(a, func(*http.Request) (*http.Response, error) { return response(200, reply), nil })
+	for _, args := range [][]string{
+		{"rest", "POST", "/wallet/getaccount", "-n", "tron-mainnet", "-o", "json"},
+		{"rest", "GET", "/walletsolidity/getaccount", "-n", "tron-mainnet", "-o", "json"},
+	} {
+		c, out, e := run(t, a, args...)
+		if c != 1 || out != "" || !strings.Contains(e, `"API_ERROR"`) || !strings.Contains(e, `"httpStatus": 200`) || !strings.Contains(e, `"details"`) || !strings.Contains(e, "ParseException") {
+			t.Fatalf("%v: %d %s %s", args, c, out, e)
+		}
+	}
+	// A blank Error still fails, with a readable message.
+	reply = `{"Error":" "}`
+	if c, _, e := run(t, a, "rest", "POST", "/wallet/getnowblock", "-n", "tron-mainnet", "-o", "json"); c != 1 || !strings.Contains(e, `"message": "API rejected the request."`) {
+		t.Fatalf("%d %s", c, e)
+	}
+	// Only Tron answers errors this way; on another chain an Error key is part of the data.
+	c, out, e := run(t, a, "rest", "GET", "/accounts/0x1", "-n", "aptos-mainnet", "-o", "json")
+	if c != 0 || !strings.Contains(out, `"Error"`) {
+		t.Fatalf("%d %s %s", c, out, e)
+	}
+}
+
 func TestRESTRejectsAmbiguityAndUnsafePaths(t *testing.T) {
 	a := productTestApp(t)
 	mockAPI(a, func(*http.Request) (*http.Response, error) { t.Fatal("invalid REST reached API"); return nil, nil })
