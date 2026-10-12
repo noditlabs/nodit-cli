@@ -8,7 +8,7 @@ import (
 
 // The lookup API accepts its own set of networks, which is not the set the Node and Data products serve.
 // aptos-testnet and arc-testnet answer on stg and prd even though the published enum leaves them out.
-const lookupNetworks = "aptos-mainnet aptos-testnet arbitrum-mainnet arbitrum-sepolia arc-testnet base-mainnet base-sepolia bitcoin-mainnet bitcoincash-mainnet bnb-mainnet bnb-testnet chiliz-mainnet dogecoin-mainnet ethereum-mainnet ethereum-sepolia ethereum-hoodi ethereumclassic-mainnet giwa-sepolia kaia-mainnet kaia-kairos optimism-mainnet optimism-sepolia polygon-mainnet luniverse-mainnet tron-mainnet xrpl-mainnet"
+const lookupNetworks = "aptos-mainnet aptos-testnet arbitrum-mainnet arbitrum-sepolia arc-mainnet arc-testnet base-mainnet base-sepolia bitcoin-mainnet bitcoincash-mainnet bnb-mainnet bnb-testnet chiliz-mainnet dogecoin-mainnet ethereum-mainnet ethereum-sepolia ethereum-hoodi ethereumclassic-mainnet giwa-sepolia kaia-mainnet kaia-kairos optimism-mainnet optimism-sepolia polygon-mainnet luniverse-mainnet tron-mainnet xrpl-mainnet"
 
 func (a *app) entityLookupCommand() *cobra.Command {
 	var flags productFlags

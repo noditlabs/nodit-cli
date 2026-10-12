@@ -20,7 +20,7 @@ func makeCatalog() []network {
 	groups := []struct{ chain, names, products string }{
 		{"aptos", "mainnet testnet", "node data webhook"},
 		{"arbitrum", "mainnet sepolia", "node data webhook stream"},
-		{"arc", "testnet", "node data webhook stream"},
+		{"arc", "mainnet testnet", "node data webhook stream"},
 		{"avalanche", "mainnet", "node data webhook stream"},
 		{"avalanche", "fuji", "node"},
 		{"babylon", "mainnet", "node"},
