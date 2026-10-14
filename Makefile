@@ -1,4 +1,4 @@
-GO := env GOTOOLCHAIN=go1.27.1 go
+GO := env GOTOOLCHAIN=go1.27.2 go
 VERSION ?= unreleased
 RACE ?= -race
 OUTPUT ?= bin/nodit

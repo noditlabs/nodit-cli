@@ -272,7 +272,7 @@ Success is written to `data` on stdout and failure to `error` on stderr. An erro
 
 ## Build
 
-Requires Go 1.27.1.
+Requires Go 1.27.2.
 
 ```sh
 go build ./cmd/nodit
