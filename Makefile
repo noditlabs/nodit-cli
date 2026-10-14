@@ -1,4 +1,4 @@
-GO := env GOTOOLCHAIN=go1.27.2 go
+GO := env GOTOOLCHAIN=go$(shell sed -n 's/^go //p' go.mod) go
 VERSION ?= unreleased
 RACE ?= -race
 OUTPUT ?= bin/nodit
